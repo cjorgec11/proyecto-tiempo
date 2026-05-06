@@ -1,19 +1,23 @@
 import {
   bearing,
   geocode,
+  geocodeSuggest,
   parseRouteFile,
   pathDistance,
   readSavedRoutes,
+  riskFor,
   routeBetween,
   sampleRoute,
   setDefaultDeparture,
   state,
   weatherFor,
+  weatherLabels,
   writeSavedRoutes,
 } from "./model.js";
-import { dom, drawRoute, renderSavedRoutes, renderSummary, renderTimeline, setStatus, setWindow } from "./view.js";
+import { dom, drawRoute, hideAutocomplete, initTheme, renderSavedRoutes, renderSummary, renderTimeline, setStatus, setWindow, showAutocomplete, toggleTheme } from "./view.js";
 
 export function initApp() {
+  initTheme();
   bindEvents();
   setDefaultDeparture(dom.departure);
   dom.samplesOut.value = dom.samples.value;
@@ -49,6 +53,12 @@ function bindEvents() {
   dom.saveRoute.addEventListener("click", saveCurrentRoute);
   dom.savedRoutes.addEventListener("click", handleSavedRouteAction);
   dom.form.addEventListener("submit", calculate);
+
+  document.querySelector("#themeToggle")?.addEventListener("click", toggleTheme);
+  document.querySelector("#copyBtn")?.addEventListener("click", copySummary);
+
+  bindAutocomplete(document.querySelector("#startCity"), document.querySelector("#startCityList"));
+  bindAutocomplete(document.querySelector("#endCity"), document.querySelector("#endCityList"));
 }
 
 async function handleRouteFile(event) {
@@ -132,14 +142,67 @@ function loadSavedRoute(id) {
   calculate();
 }
 
+function bindAutocomplete(inputEl, listEl) {
+  if (!inputEl || !listEl) return;
+  let debounceTimer;
+  inputEl.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      const suggestions = await geocodeSuggest(inputEl.value.trim());
+      showAutocomplete(listEl, suggestions, (label) => {
+        inputEl.value = label;
+      });
+    }, 300);
+  });
+  inputEl.addEventListener("blur", () => {
+    setTimeout(() => hideAutocomplete(listEl), 150);
+  });
+  inputEl.addEventListener("focus", () => {
+    if (inputEl.value.trim().length >= 2) inputEl.dispatchEvent(new Event("input"));
+  });
+}
+
+function copySummary() {
+  if (!state.currentSegments.length) {
+    setStatus("Sin datos");
+    setTimeout(() => setStatus("Listo"), 1500);
+    return;
+  }
+  const hours = Math.floor(state.currentDuration);
+  const mins = Math.round((state.currentDuration - hours) * 60);
+  const risks = state.currentSegments.map((s) => riskFor(s, state.currentRideBearing));
+  const bad = risks.filter((r) => r === "bad").length;
+  const watch = risks.filter((r) => r === "watch").length;
+  const riskLabel = bad ? "Duro 🔴" : watch ? "Vigilar 🟡" : "Bueno 🟢";
+  const from = state.currentStartName.split(",")[0];
+  const to = state.currentEndName.split(",")[0];
+  const lines = [
+    `🚴 RideCast: ${from} → ${to}`,
+    `📏 Distancia: ${Math.round(state.currentDistance)} km`,
+    `⏱️ Duración: ${hours}h ${String(mins).padStart(2, "0")}m`,
+    `Condiciones: ${riskLabel}`,
+    "",
+    ...state.currentSegments.map((s) => {
+      const [label] = weatherLabels[s.code] || ["Variable"];
+      const time = s.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      return `• km ${Math.round(s.km)} (${time}): ${label}, ${Math.round(s.temperature)}°C, viento ${Math.round(s.wind)} km/h`;
+    }),
+  ];
+  navigator.clipboard.writeText(lines.join("\n"))
+    .then(() => { setStatus("¡Copiado!"); setTimeout(() => setStatus("Listo"), 2000); })
+    .catch(() => { setStatus("Error"); setTimeout(() => setStatus("Listo"), 1500); });
+}
+
 async function calculate(event) {
   event?.preventDefault();
   const data = new FormData(dom.form);
   const speed = Number(data.get("speed"));
   const count = Number(data.get("samples"));
   const departure = new Date(data.get("departure"));
+  const submitBtn = dom.form.querySelector('button[type="submit"]');
 
   try {
+    submitBtn?.classList.add("loading");
     setStatus("Buscando");
     dom.timeline.innerHTML = `<div class="empty">Cargando</div>`;
     setStatus("Ruta");
@@ -178,6 +241,8 @@ async function calculate(event) {
     state.currentSegments = await weatherFor(points, departure, distance, speed);
     state.currentRouteCoords = route.coords;
     state.currentRideBearing = rideBearing;
+    state.currentDistance = distance;
+    state.currentDuration = duration;
     renderTimeline(state.currentSegments, rideBearing, state.currentMode);
     renderSummary(distance, duration, state.currentSegments, rideBearing);
     drawRoute(state.currentSegments, state.currentStartName, state.currentEndName, rideBearing, state.currentRouteCoords, state.currentMode);
@@ -186,5 +251,7 @@ async function calculate(event) {
     dom.timeline.innerHTML = `<div class="error">${error.message || "No se pudo calcular la ruta"}</div>`;
     setStatus("Error");
     drawRoute();
+  } finally {
+    submitBtn?.classList.remove("loading");
   }
 }
