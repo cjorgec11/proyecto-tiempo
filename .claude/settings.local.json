@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node \"c:\\\\Users\\\\jorge\\\\Desktop\\\\proyecto tiempo\\\\server.mjs\")",
+      "Bash(node server.mjs)"
+    ]
+  }
+}
