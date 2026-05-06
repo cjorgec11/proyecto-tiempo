@@ -1,4 +1,4 @@
-import { metricValue, pathDistance, riskFor, routeSlice, weatherBadge, weatherLabels } from "./model.js";
+import { isNighttime, metricValue, pathDistance, riskFor, routeSlice, weatherBadge, weatherEmoji, weatherLabels, windCompass } from "./model.js";
 
 export const dom = {
   form: document.querySelector("#rideForm"),
@@ -51,14 +51,14 @@ export function renderTimeline(segments, rideBearing, mode) {
     const [label] = weatherLabels[segment.code] || ["Variable"];
     const card = dom.template.content.firstElementChild.cloneNode(true);
     card.dataset.risk = risk;
+    const night = isNighttime(segment.arrival);
     card.querySelector(".segment-km").textContent = `${Math.round(segment.km)} km`;
     card.querySelector(".segment-name").textContent = label;
-    card.querySelector(".weather-icon").textContent = weatherBadge(segment.code);
-    card.querySelector(".segment-meta").textContent = segment.arrival.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    card.querySelector(".temp").textContent = `${Math.round(segment.temperature)} C`;
+    card.querySelector(".weather-icon").textContent = weatherEmoji(segment.code);
+    const timeStr = segment.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    const compass = windCompass(segment.windDirection);
+    card.querySelector(".segment-meta").textContent = `${night ? "🌙 " : ""}${timeStr} · ${Math.round(segment.wind)} km/h ${compass}`;
+    card.querySelector(".temp").textContent = `${Math.round(segment.temperature)}°C`;
     card.querySelector(".wind").textContent = `${Math.round(segment.wind)} km/h`;
     card.querySelector(".gust").textContent = `${Math.round(segment.gust)} km/h`;
     card.querySelector(".rain").textContent = `${segment.rainChance}%`;
@@ -153,12 +153,14 @@ function metricMarkerIcon(segment, risk, mode) {
 }
 
 function segmentTooltip(segment, label) {
+  const emoji = weatherEmoji(segment.code);
+  const compass = windCompass(segment.windDirection);
+  const night = isNighttime(segment.arrival) ? "🌙 " : "";
   return `
-    <strong>${Math.round(segment.km)} km - ${label}</strong><br>
-    Hora: ${segment.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}<br>
-    Temp: ${Math.round(segment.temperature)} C<br>
-    Viento: ${Math.round(segment.wind)} km/h, racha ${Math.round(segment.gust)} km/h<br>
-    Lluvia: ${segment.rainChance}%
+    <strong>${emoji} ${Math.round(segment.km)} km — ${label}</strong><br>
+    ${night}${segment.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}<br>
+    🌡️ ${Math.round(segment.temperature)}°C &nbsp; 💨 ${Math.round(segment.wind)} km/h ${compass}<br>
+    🌧️ ${segment.rainChance}%
   `;
 }
 
@@ -200,6 +202,46 @@ export function drawRoute(segments = [], startName = "Salida", endName = "Llegad
     routeMap.invalidateSize();
     routeMap.fitBounds(L.latLngBounds(routeLatLngs), { padding: [36, 36], maxZoom: 11 });
   }, 0);
+}
+
+export function showAutocomplete(listEl, suggestions, onSelect) {
+  listEl.innerHTML = "";
+  if (!suggestions.length) {
+    listEl.hidden = true;
+    return;
+  }
+  suggestions.forEach((label) => {
+    const li = document.createElement("li");
+    li.className = "autocomplete-item";
+    li.textContent = label;
+    li.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      onSelect(label);
+      listEl.hidden = true;
+    });
+    listEl.append(li);
+  });
+  listEl.hidden = false;
+}
+
+export function hideAutocomplete(listEl) {
+  listEl.hidden = true;
+}
+
+export function toggleTheme() {
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const next = isDark ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("ridecast.theme", next);
+  const btn = document.querySelector("#themeToggle");
+  if (btn) btn.textContent = next === "dark" ? "☀️" : "🌙";
+}
+
+export function initTheme() {
+  const saved = localStorage.getItem("ridecast.theme") || "light";
+  document.documentElement.setAttribute("data-theme", saved);
+  const btn = document.querySelector("#themeToggle");
+  if (btn) btn.textContent = saved === "dark" ? "☀️" : "🌙";
 }
 
 export function renderSavedRoutes(routes) {
