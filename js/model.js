@@ -6,6 +6,8 @@ export const state = {
   currentEndName: "Llegada",
   currentRideBearing: 0,
   importedRoute: null,
+  currentDistance: 0,
+  currentDuration: 0,
 };
 
 export const weatherLabels = {
@@ -301,6 +303,42 @@ export function weatherBadge(code) {
   if ([80, 81, 82].includes(code)) return "Chu";
   if (code === 95) return "Tor";
   return "Var";
+}
+
+export function weatherEmoji(code) {
+  if ([0, 1].includes(code)) return "☀️";
+  if (code === 2) return "⛅";
+  if (code === 3) return "☁️";
+  if ([45, 48].includes(code)) return "🌫️";
+  if ([51, 53, 55].includes(code)) return "🌦️";
+  if ([61, 63, 65].includes(code)) return "🌧️";
+  if ([71, 73, 75].includes(code)) return "❄️";
+  if ([80, 81, 82].includes(code)) return "⛈️";
+  if (code === 95) return "⛈️";
+  return "🌡️";
+}
+
+export function windCompass(degrees) {
+  const dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+  return dirs[Math.round((degrees % 360) / 45) % 8];
+}
+
+export function isNighttime(date) {
+  const h = date.getHours();
+  return h < 6 || h >= 21;
+}
+
+export async function geocodeSuggest(query) {
+  if (query.length < 2) return [];
+  try {
+    const params = new URLSearchParams({ name: query, count: "5", language: "es", format: "json" });
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).map((p) => [p.name, p.admin1, p.country].filter(Boolean).join(", "));
+  } catch {
+    return [];
+  }
 }
 
 export function readSavedRoutes() {

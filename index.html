@@ -14,7 +14,10 @@
           <p class="eyebrow">RideCast</p>
           <h1>Tiempo de ruta para ciclistas</h1>
         </div>
-        <div class="status-pill" id="statusPill">Listo</div>
+        <div class="topbar-right">
+          <div class="status-pill" id="statusPill">Listo</div>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar tema">🌙</button>
+        </div>
       </header>
 
       <nav class="app-menu" aria-label="Menu principal">
@@ -35,12 +38,18 @@
 
                 <div class="field">
                   <label for="startCity">Salida</label>
-                  <input id="startCity" name="startCity" value="Madrid" autocomplete="off" required />
+                  <div class="autocomplete-wrap">
+                    <input id="startCity" name="startCity" value="Madrid" autocomplete="off" required />
+                    <ul class="autocomplete-list" id="startCityList" hidden></ul>
+                  </div>
                 </div>
 
                 <div class="field">
                   <label for="endCity">Llegada</label>
-                  <input id="endCity" name="endCity" value="Segovia" autocomplete="off" required />
+                  <div class="autocomplete-wrap">
+                    <input id="endCity" name="endCity" value="Segovia" autocomplete="off" required />
+                    <ul class="autocomplete-list" id="endCityList" hidden></ul>
+                  </div>
                 </div>
               </section>
 
@@ -156,10 +165,13 @@
 
           <div class="timeline-head">
             <h2>Tramos</h2>
-            <div class="toggle-group" role="group" aria-label="Metrica principal">
-              <button class="chip active" type="button" data-mode="wind">Viento</button>
-              <button class="chip" type="button" data-mode="rain">Lluvia</button>
-              <button class="chip" type="button" data-mode="temp">Temp</button>
+            <div class="timeline-controls">
+              <button class="secondary copy-btn" type="button" id="copyBtn">📋 Copiar</button>
+              <div class="toggle-group" role="group" aria-label="Metrica principal">
+                <button class="chip active" type="button" data-mode="wind">Viento</button>
+                <button class="chip" type="button" data-mode="rain">Lluvia</button>
+                <button class="chip" type="button" data-mode="temp">Temp</button>
+              </div>
             </div>
           </div>
 
