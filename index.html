@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RideCast</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">RideCast</p>
+          <h1>Tiempo de ruta para ciclistas</h1>
+        </div>
+        <div class="status-pill" id="statusPill">Listo</div>
+      </header>
+
+      <nav class="app-menu" aria-label="Menu principal">
+        <button class="menu-button active" type="button" data-window="plan">Planificar</button>
+        <button class="menu-button" type="button" data-window="library">Rutas</button>
+        <button class="menu-button" type="button" data-window="forecast">Mapa y tiempo</button>
+      </nav>
+
+      <section class="window active" data-window-panel="plan">
+        <div class="workspace single-column">
+          <aside class="controls wide-panel" aria-label="Planificacion de ruta">
+            <form id="rideForm">
+              <section class="control-section" id="routeSection">
+                <div class="section-title">
+                  <span>Ruta</span>
+                  <small id="routeSource">Origen / destino</small>
+                </div>
+
+                <div class="field">
+                  <label for="startCity">Salida</label>
+                  <input id="startCity" name="startCity" value="Madrid" autocomplete="off" required />
+                </div>
+
+                <div class="field">
+                  <label for="endCity">Llegada</label>
+                  <input id="endCity" name="endCity" value="Segovia" autocomplete="off" required />
+                </div>
+              </section>
+
+              <section class="control-section" id="weatherSection">
+                <div class="section-title">
+                  <span>Tiempo</span>
+                  <small>Salida y ritmo</small>
+                </div>
+
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="departure">Hora</label>
+                    <input id="departure" name="departure" type="datetime-local" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="speed">Km/h</label>
+                    <input id="speed" name="speed" type="number" min="8" max="45" step="1" value="23" required />
+                  </div>
+                </div>
+              </section>
+
+              <section class="control-section" id="settingsSection">
+                <div class="section-title">
+                  <span>Ajustes</span>
+                  <small>Precision</small>
+                </div>
+
+                <div class="field">
+                  <label for="samples">Tramos</label>
+                  <input id="samples" name="samples" type="range" min="4" max="12" value="8" />
+                  <div class="range-row">
+                    <span>4</span>
+                    <output id="samplesOut">8</output>
+                    <span>12</span>
+                  </div>
+                </div>
+              </section>
+
+              <button class="primary" type="submit">
+                <span class="button-icon">↻</span>
+                Calcular
+              </button>
+            </form>
+
+            <div class="metric-stack" id="summaryCards">
+              <article class="metric">
+                <span>Distancia</span>
+                <strong>--</strong>
+              </article>
+              <article class="metric">
+                <span>Duracion</span>
+                <strong>--</strong>
+              </article>
+              <article class="metric">
+                <span>Riesgo</span>
+                <strong>--</strong>
+              </article>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="window" data-window-panel="library">
+        <div class="workspace single-column">
+          <aside class="controls wide-panel" aria-label="Biblioteca de rutas">
+            <section class="control-section" id="importSection">
+              <div class="section-title">
+                <span>Importar</span>
+                <small>Strava, Wikiloc, GPX</small>
+              </div>
+
+              <div class="connect-grid">
+                <button class="secondary" type="button" id="stravaConnect">Strava</button>
+                <button class="secondary" type="button" id="wikilocConnect">Wikiloc</button>
+              </div>
+
+              <label class="file-drop" for="routeFile">
+                <span>Subir fichero GPX o TCX</span>
+                <input id="routeFile" type="file" accept=".gpx,.tcx,.xml" />
+              </label>
+
+              <div class="import-note" id="importStatus">Sin ruta importada</div>
+            </section>
+
+            <section class="control-section" id="savedSection">
+              <div class="section-title">
+                <span>Guardadas</span>
+                <small id="savedCount">0 rutas</small>
+              </div>
+
+              <div class="save-row">
+                <input id="saveName" type="text" placeholder="Nombre de ruta" autocomplete="off" />
+                <button class="secondary icon-action" type="button" id="saveRoute">Guardar</button>
+              </div>
+
+              <div class="saved-list" id="savedRoutes"></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="window" data-window-panel="forecast">
+        <section class="ride-board" id="mapSection" aria-label="Panel de ruta">
+          <div class="map-panel">
+            <div id="routeMap" aria-label="Mapa geografico de la ruta"></div>
+            <div class="map-legend" id="mapLegend">
+              <span><i class="dot good"></i>Bueno</span>
+              <span><i class="dot watch"></i>Vigilar</span>
+              <span><i class="dot bad"></i>Duro</span>
+            </div>
+          </div>
+
+          <div class="timeline-head">
+            <h2>Tramos</h2>
+            <div class="toggle-group" role="group" aria-label="Metrica principal">
+              <button class="chip active" type="button" data-mode="wind">Viento</button>
+              <button class="chip" type="button" data-mode="rain">Lluvia</button>
+              <button class="chip" type="button" data-mode="temp">Temp</button>
+            </div>
+          </div>
+
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="segmentTemplate">
+      <article class="segment-card">
+        <div class="segment-top">
+          <div>
+            <p class="segment-km"></p>
+            <h3 class="segment-name"></h3>
+          </div>
+          <div class="weather-icon"></div>
+        </div>
+        <div class="segment-meta"></div>
+        <div class="bar-track"><span class="bar-fill"></span></div>
+        <dl class="weather-grid">
+          <div><dt>Temp</dt><dd class="temp"></dd></div>
+          <div><dt>Viento</dt><dd class="wind"></dd></div>
+          <div><dt>Racha</dt><dd class="gust"></dd></div>
+          <div><dt>Lluvia</dt><dd class="rain"></dd></div>
+        </dl>
+      </article>
+    </template>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
