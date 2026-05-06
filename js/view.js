@@ -9,6 +9,12 @@ export const dom = {
   samplesOut: document.querySelector("#samplesOut"),
   summaryCards: document.querySelector("#summaryCards"),
   routeMapEl: document.querySelector("#routeMap"),
+  planMapEl: document.querySelector("#planMap"),
+  planHint: document.querySelector("#planHint"),
+  waypointList: document.querySelector("#waypointList"),
+  waypointCount: document.querySelector("#waypointCount"),
+  undoWaypoint: document.querySelector("#undoWaypoint"),
+  clearWaypoints: document.querySelector("#clearWaypoints"),
   routeFile: document.querySelector("#routeFile"),
   importStatus: document.querySelector("#importStatus"),
   routeSource: document.querySelector("#routeSource"),
@@ -25,6 +31,70 @@ export const dom = {
 
 let routeMap;
 let routeLayer;
+let planMap;
+let planMarkersLayer;
+let planLineLayer;
+
+export function initPlanMap(onClick) {
+  if (!window.L || !dom.planMapEl) return null;
+  if (planMap) return planMap;
+  planMap = L.map(dom.planMapEl, { scrollWheelZoom: true, zoomControl: true }).setView([40.4168, -3.7038], 6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(planMap);
+  planMarkersLayer = L.layerGroup().addTo(planMap);
+  planLineLayer = L.layerGroup().addTo(planMap);
+  planMap.on("click", (event) => onClick(event.latlng.lat, event.latlng.lng));
+  return planMap;
+}
+
+export function refreshPlanMap() {
+  if (planMap) setTimeout(() => planMap.invalidateSize(), 0);
+}
+
+function waypointIcon(label, kind) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="waypoint-marker ${kind}">${label}</div>`,
+    iconAnchor: [13, 13],
+  });
+}
+
+export function renderWaypoints(waypoints) {
+  dom.waypointCount.textContent = `${waypoints.length} ${waypoints.length === 1 ? "punto" : "puntos"}`;
+  dom.waypointList.textContent = "";
+  waypoints.forEach((point, index) => {
+    const li = document.createElement("li");
+    li.className = "waypoint-item";
+    const role = index === 0 ? "Salida" : index === waypoints.length - 1 ? "Llegada" : `Punto ${index}`;
+    const label = document.createElement("span");
+    label.innerHTML = `<strong>${role}</strong> · ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "mini-button danger-button";
+    remove.textContent = "×";
+    remove.dataset.action = "remove-waypoint";
+    remove.dataset.index = String(index);
+    li.append(label, remove);
+    dom.waypointList.append(li);
+  });
+
+  if (!planMarkersLayer || !planLineLayer) return;
+  planMarkersLayer.clearLayers();
+  planLineLayer.clearLayers();
+  if (!waypoints.length) return;
+  waypoints.forEach((point, index) => {
+    const kind = index === 0 ? "start" : index === waypoints.length - 1 && waypoints.length > 1 ? "end" : "via";
+    const label = index === 0 ? "S" : index === waypoints.length - 1 && waypoints.length > 1 ? "L" : String(index);
+    L.marker([point.lat, point.lon], { icon: waypointIcon(label, kind) }).addTo(planMarkersLayer);
+  });
+  if (waypoints.length > 1) {
+    const latlngs = waypoints.map((p) => [p.lat, p.lon]);
+    L.polyline(latlngs, { color: "#0c8f7a", weight: 4, opacity: 0.75, dashArray: "6 8" }).addTo(planLineLayer);
+    if (waypoints.length === 2) planMap.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 11 });
+  }
+}
 
 export function setStatus(text) {
   dom.statusPill.textContent = text;
@@ -34,6 +104,7 @@ export function setWindow(name) {
   dom.menuButtons.forEach((button) => button.classList.toggle("active", button.dataset.window === name));
   dom.windowPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.windowPanel === name));
   if (name === "forecast" && routeMap) setTimeout(() => routeMap.invalidateSize(), 0);
+  if (name === "plan" && planMap) setTimeout(() => planMap.invalidateSize(), 0);
 }
 
 export function renderTimeline(segments, rideBearing, mode) {
@@ -210,13 +281,13 @@ export function showAutocomplete(listEl, suggestions, onSelect) {
     listEl.hidden = true;
     return;
   }
-  suggestions.forEach((label) => {
+  suggestions.forEach((suggestion) => {
     const li = document.createElement("li");
     li.className = "autocomplete-item";
-    li.textContent = label;
+    li.textContent = suggestion.label;
     li.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      onSelect(label);
+      onSelect(suggestion);
       listEl.hidden = true;
     });
     listEl.append(li);
