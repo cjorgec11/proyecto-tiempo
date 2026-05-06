@@ -8,6 +8,7 @@ export const state = {
   importedRoute: null,
   currentDistance: 0,
   currentDuration: 0,
+  waypoints: [],
 };
 
 export const weatherLabels = {
@@ -82,10 +83,28 @@ function interpolate(a, b, count) {
   });
 }
 
-export async function routeBetween(start, end) {
-  const fallbackCoords = interpolate(start, end, 32);
+export async function snapToRoad(lat, lon) {
   try {
-    const coords = `${start.lon},${start.lat};${end.lon},${end.lat}`;
+    const response = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lon},${lat}?number=1`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const wp = data.waypoints?.[0];
+    if (!wp?.location) return null;
+    const [snLon, snLat] = wp.location;
+    return { lat: snLat, lon: snLon };
+  } catch {
+    return null;
+  }
+}
+
+export async function routeAcross(points) {
+  if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa");
+  const fallbackCoords = points.slice(1).reduce(
+    (acc, point, index) => acc.concat(interpolate(points[index], point, 16).slice(index === 0 ? 0 : 1)),
+    []
+  );
+  try {
+    const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
     const params = new URLSearchParams({
       alternatives: "false",
       steps: "false",
@@ -109,6 +128,10 @@ export async function routeBetween(start, end) {
       routed: false,
     };
   }
+}
+
+export async function routeBetween(start, end) {
+  return routeAcross([start, end]);
 }
 
 export function pathDistance(points) {
@@ -335,7 +358,11 @@ export async function geocodeSuggest(query) {
     const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.results || []).map((p) => [p.name, p.admin1, p.country].filter(Boolean).join(", "));
+    return (data.results || []).map((p) => ({
+      label: [p.name, p.admin1, p.country].filter(Boolean).join(", "),
+      lat: p.latitude,
+      lon: p.longitude,
+    }));
   } catch {
     return [];
   }

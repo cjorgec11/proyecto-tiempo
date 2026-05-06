@@ -21,9 +21,18 @@
       </header>
 
       <nav class="app-menu" aria-label="Menu principal">
-        <button class="menu-button active" type="button" data-window="plan">Planificar</button>
-        <button class="menu-button" type="button" data-window="library">Rutas</button>
-        <button class="menu-button" type="button" data-window="forecast">Mapa y tiempo</button>
+        <button class="menu-button active" type="button" data-window="plan">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
+          <span>Planificar</span>
+        </button>
+        <button class="menu-button" type="button" data-window="library">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/><polyline points="16 15 19 18 22 15"/></svg>
+          <span>Rutas</span>
+        </button>
+        <button class="menu-button" type="button" data-window="forecast">
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 0 1 0 9Z"/></svg>
+          <span>Mapa y tiempo</span>
+        </button>
       </nav>
 
       <section class="window active" data-window-panel="plan">
@@ -33,24 +42,23 @@
               <section class="control-section" id="routeSection">
                 <div class="section-title">
                   <span>Ruta</span>
-                  <small id="routeSource">Origen / destino</small>
+                  <small id="routeSource">Marca puntos en el mapa</small>
                 </div>
 
-                <div class="field">
-                  <label for="startCity">Salida</label>
-                  <div class="autocomplete-wrap">
-                    <input id="startCity" name="startCity" value="Madrid" autocomplete="off" required />
-                    <ul class="autocomplete-list" id="startCityList" hidden></ul>
+                <div class="plan-map-wrap">
+                  <div id="planMap" aria-label="Mapa para marcar puntos de la ruta"></div>
+                  <div class="plan-map-hint" id="planHint">Haz clic en el mapa para añadir puntos. El primero es la salida, el último la llegada.</div>
+                </div>
+
+                <div class="waypoint-toolbar">
+                  <span class="waypoint-count" id="waypointCount">0 puntos</span>
+                  <div class="waypoint-actions">
+                    <button class="mini-button" type="button" id="undoWaypoint">Deshacer</button>
+                    <button class="mini-button danger-button" type="button" id="clearWaypoints">Vaciar</button>
                   </div>
                 </div>
 
-                <div class="field">
-                  <label for="endCity">Llegada</label>
-                  <div class="autocomplete-wrap">
-                    <input id="endCity" name="endCity" value="Segovia" autocomplete="off" required />
-                    <ul class="autocomplete-list" id="endCityList" hidden></ul>
-                  </div>
-                </div>
+                <ol class="waypoint-list" id="waypointList"></ol>
               </section>
 
               <section class="control-section" id="weatherSection">
@@ -166,8 +174,7 @@
           <div class="timeline-head">
             <h2>Tramos</h2>
             <div class="timeline-controls">
-              <button class="secondary copy-btn" type="button" id="copyBtn">📋 Copiar</button>
-              <div class="toggle-group" role="group" aria-label="Metrica principal">
+<div class="toggle-group" role="group" aria-label="Metrica principal">
                 <button class="chip active" type="button" data-mode="wind">Viento</button>
                 <button class="chip" type="button" data-mode="rain">Lluvia</button>
                 <button class="chip" type="button" data-mode="temp">Temp</button>
