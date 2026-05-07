@@ -18,10 +18,10 @@ export const dom = {
   routeFile: document.querySelector("#routeFile"),
   importStatus: document.querySelector("#importStatus"),
   routeSource: document.querySelector("#routeSource"),
-  stravaConnect: document.querySelector("#stravaConnect"),
-  wikilocConnect: document.querySelector("#wikilocConnect"),
   saveName: document.querySelector("#saveName"),
   saveRoute: document.querySelector("#saveRoute"),
+  exportRoute: document.querySelector("#exportRoute"),
+  exportPlanRoute: document.querySelector("#exportPlanRoute"),
   savedRoutes: document.querySelector("#savedRoutes"),
   savedCount: document.querySelector("#savedCount"),
   departure: document.querySelector("#departure"),
@@ -91,13 +91,41 @@ export function renderWaypoints(waypoints) {
   });
   if (waypoints.length > 1) {
     const latlngs = waypoints.map((p) => [p.lat, p.lon]);
-    L.polyline(latlngs, { color: "#0c8f7a", weight: 4, opacity: 0.75, dashArray: "6 8" }).addTo(planLineLayer);
+    L.polyline(latlngs, { color: "#0c8f7a", weight: 3, opacity: 0.45, dashArray: "4 6" }).addTo(planLineLayer);
     if (waypoints.length === 2) planMap.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 11 });
   }
 }
 
+export function setPlanRoutePreview(coords) {
+  if (!planLineLayer) return;
+  planLineLayer.clearLayers();
+  if (!coords || coords.length < 2) return;
+  const latlngs = coords.map((c) => [c.lat, c.lon]);
+  L.polyline(latlngs, { color: "#0c8f7a", weight: 4, opacity: 0.85 }).addTo(planLineLayer);
+  if (planMap) planMap.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 13 });
+}
+
 export function setStatus(text) {
-  dom.statusPill.textContent = text;
+  if (dom.statusPill) dom.statusPill.textContent = text;
+}
+
+export function updateSamplesRange(distanceKm) {
+  if (!dom.samples) return;
+  const min = 4;
+  let max;
+  if (!distanceKm || distanceKm <= 0) max = 12;
+  else max = Math.max(min, Math.min(30, Math.round(distanceKm / 6)));
+  dom.samples.min = String(min);
+  dom.samples.max = String(max);
+  if (Number(dom.samples.value) > max) dom.samples.value = String(max);
+  if (Number(dom.samples.value) < min) dom.samples.value = String(min);
+  if (dom.samplesOut) dom.samplesOut.value = dom.samples.value;
+  const rangeRow = dom.samples.parentElement?.querySelector(".range-row");
+  if (rangeRow) {
+    const spans = rangeRow.querySelectorAll("span");
+    if (spans[0]) spans[0].textContent = String(min);
+    if (spans[1]) spans[1].textContent = String(max);
+  }
 }
 
 export function setWindow(name) {
@@ -140,17 +168,21 @@ export function renderTimeline(segments, rideBearing, mode) {
   });
 }
 
-export function renderSummary(distance, durationHours, segments, rideBearing) {
+export function renderSummary(distance, durationHours, segments, rideBearing, roadRatio) {
   const risks = segments.map((s) => riskFor(s, rideBearing));
   const bad = risks.filter((r) => r === "bad").length;
   const watch = risks.filter((r) => r === "watch").length;
   const riskLabel = bad ? "Duro" : watch ? "Vigilar" : "Bueno";
   const hours = Math.floor(durationHours);
   const minutes = Math.round((durationHours - hours) * 60);
+  const roadCard = Number.isFinite(roadRatio)
+    ? `<article class="metric"><span>Carretera</span><strong>${Math.round(roadRatio * 100)}%</strong></article>`
+    : "";
   dom.summaryCards.innerHTML = `
     <article class="metric"><span>Distancia</span><strong>${Math.round(distance)} km</strong></article>
     <article class="metric"><span>Duracion</span><strong>${hours} h ${String(minutes).padStart(2, "0")} m</strong></article>
     <article class="metric"><span>Riesgo</span><strong>${riskLabel}</strong></article>
+    ${roadCard}
   `;
 }
 
@@ -348,7 +380,13 @@ export function renderSavedRoutes(routes) {
     remove.textContent = "Borrar";
     remove.dataset.action = "delete";
     remove.dataset.id = route.id;
-    actions.append(load, remove);
+    const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
+    exportBtn.className = "mini-button";
+    exportBtn.textContent = "GPX";
+    exportBtn.dataset.action = "export";
+    exportBtn.dataset.id = route.id;
+    actions.append(load, exportBtn, remove);
     item.append(info, actions);
     dom.savedRoutes.append(item);
   });

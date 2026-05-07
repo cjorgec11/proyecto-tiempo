@@ -15,7 +15,6 @@
           <h1>Tiempo de ruta para ciclistas</h1>
         </div>
         <div class="topbar-right">
-          <div class="status-pill" id="statusPill">Listo</div>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar tema">🌙</button>
         </div>
       </header>
@@ -39,6 +38,18 @@
         <div class="workspace single-column">
           <aside class="controls wide-panel" aria-label="Planificacion de ruta">
             <form id="rideForm">
+              <section class="control-section" id="routeModeSection">
+                <div class="section-title">
+                  <span>Tipo de ruta</span>
+                  <small>Mixto, carretera o caminos</small>
+                </div>
+                <div class="toggle-group" role="group" aria-label="Tipo de ruta">
+                  <button class="chip active" type="button" data-route-mode="mixto">Mixto</button>
+                  <button class="chip" type="button" data-route-mode="carretera">Carretera</button>
+                  <button class="chip" type="button" data-route-mode="caminos">Caminos</button>
+                </div>
+              </section>
+
               <section class="control-section" id="routeSection">
                 <div class="section-title">
                   <span>Ruta</span>
@@ -101,6 +112,8 @@
                 <span class="button-icon">↻</span>
                 Calcular
               </button>
+
+              <button class="secondary" type="button" id="exportPlanRoute">Exportar GPX</button>
             </form>
 
             <div class="metric-stack" id="summaryCards">
@@ -127,12 +140,7 @@
             <section class="control-section" id="importSection">
               <div class="section-title">
                 <span>Importar</span>
-                <small>Strava, Wikiloc, GPX</small>
-              </div>
-
-              <div class="connect-grid">
-                <button class="secondary" type="button" id="stravaConnect">Strava</button>
-                <button class="secondary" type="button" id="wikilocConnect">Wikiloc</button>
+                <small>GPX o TCX</small>
               </div>
 
               <label class="file-drop" for="routeFile">
@@ -152,6 +160,7 @@
               <div class="save-row">
                 <input id="saveName" type="text" placeholder="Nombre de ruta" autocomplete="off" />
                 <button class="secondary icon-action" type="button" id="saveRoute">Guardar</button>
+                <button class="secondary icon-action" type="button" id="exportRoute">Exportar GPX</button>
               </div>
 
               <div class="saved-list" id="savedRoutes"></div>
@@ -206,6 +215,19 @@
         </dl>
       </article>
     </template>
+
+    <div class="modal-backdrop" id="importModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+        <h3 id="importModalTitle">Hora de salida</h3>
+        <p class="modal-sub">Indica cuándo quieres iniciar la ruta importada.</p>
+        <label for="importDeparture">Fecha y hora</label>
+        <input id="importDeparture" type="datetime-local" />
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="importCancel">Cancelar</button>
+          <button type="button" class="primary" id="importConfirm">Aceptar</button>
+        </div>
+      </div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module" src="./app.js"></script>
