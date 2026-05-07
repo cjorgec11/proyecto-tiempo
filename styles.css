@@ -812,24 +812,89 @@ dd {
 .plan-map-wrap {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: #d8e3df;
+  box-shadow: 0 2px 8px rgba(23, 32, 38, 0.06);
+  transition: box-shadow 0.2s;
 }
 
 #planMap {
   width: 100%;
-  height: 320px;
+  height: 360px;
   cursor: crosshair;
 }
 
 .plan-map-hint {
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92);
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 600;
+  text-align: center;
+}
+
+/* Botón flotante para alternar pantalla completa del mapa */
+.map-fullscreen-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(23, 32, 38, 0.18);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
+}
+
+.map-fullscreen-btn:hover,
+.map-fullscreen-btn:focus-visible {
+  background: var(--accent);
+  color: #fff;
+  outline: none;
+  transform: scale(1.05);
+}
+
+[data-theme="dark"] .map-fullscreen-btn {
+  background: rgba(24, 40, 48, 0.95);
+  color: var(--ink);
+}
+
+/* Pantalla completa: el contenedor cubre toda la ventana */
+.plan-map-wrap.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  border-radius: 0;
+  border: 0;
+}
+
+.plan-map-wrap.fullscreen #planMap {
+  height: 100%;
+}
+
+.plan-map-wrap.fullscreen .plan-map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 18px;
+  max-width: calc(100% - 32px);
+  box-shadow: 0 6px 18px rgba(23, 32, 38, 0.2);
+}
+
+/* Bloquea el scroll del documento mientras el mapa está en pantalla completa */
+body.map-fullscreen-open {
+  overflow: hidden;
 }
 
 .waypoint-toolbar {
@@ -928,7 +993,7 @@ dd {
   }
 
   #planMap {
-    height: 260px;
+    height: 320px;
   }
 
   #routeMap {
@@ -1011,7 +1076,17 @@ dd {
   }
 
   #planMap {
-    height: 220px;
+    height: 300px;
+  }
+
+  .map-fullscreen-btn {
+    width: 46px;
+    height: 46px;
+  }
+
+  .mini-button {
+    min-height: 36px;
+    padding: 0 12px;
   }
 
   #routeMap {

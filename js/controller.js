@@ -1,3 +1,6 @@
+// Controlador: enlaza eventos del usuario (clics, formularios) con el modelo
+// (cálculos, APIs) y la vista (pintar). Es la única capa que orquesta ambas.
+
 import {
   bearing,
   downloadGpx,
@@ -13,7 +16,26 @@ import {
   weatherFor,
   writeSavedRoutes,
 } from "./model.js";
-import { dom, drawRoute, initPlanMap, initTheme, refreshPlanMap, renderSavedRoutes, renderSummary, renderTimeline, renderWaypoints, setPlanRoutePreview, setStatus, setWindow, toggleTheme, updateSamplesRange } from "./view.js";
+import {
+  dom,
+  drawRoute,
+  initPlanMap,
+  initTheme,
+  refreshPlanMap,
+  renderSavedRoutes,
+  renderSummary,
+  renderTimeline,
+  renderWaypoints,
+  setPlanRoutePreview,
+  setWindow,
+  toggleTheme,
+  togglePlanFullscreen,
+  updateSamplesRange,
+} from "./view.js";
+
+// setStatus desapareció: ya no existe la píldora #statusPill en el HTML.
+// Se mantiene un noop por compatibilidad para no romper llamadas residuales.
+const setStatus = () => {};
 
 let previewTimer = null;
 let previewToken = 0;
@@ -134,6 +156,14 @@ function bindEvents() {
 
   dom.undoWaypoint?.addEventListener("click", undoWaypoint);
   dom.clearWaypoints?.addEventListener("click", clearWaypoints);
+
+  // Botón pantalla completa del mapa de planificación + tecla Escape para salir.
+  dom.planFullscreenBtn?.addEventListener("click", togglePlanFullscreen);
+  document.addEventListener("keydown", (evento) => {
+    if (evento.key === "Escape" && dom.planMapWrap?.classList.contains("fullscreen")) {
+      togglePlanFullscreen();
+    }
+  });
   dom.waypointList?.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action='remove-waypoint']");
     if (!button) return;

@@ -2,8 +2,53 @@
   "name": "ridecast",
   "version": "1.0.0",
   "private": true,
+  "description": "Tiempo de ruta para ciclistas",
+  "author": "Jorge",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "electron": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "cap:sync": "cap sync android",
+    "cap:build:apk": "cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "build": {
+    "appId": "com.jorge.ridecast",
+    "productName": "RideCast",
+    "files": [
+      "electron/**/*",
+      "js/**/*",
+      "app.js",
+      "index.html",
+      "styles.css",
+      "package.json"
+    ],
+    "directories": {
+      "output": "C:/Users/jorge/RideCast-Build/electron"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.3.2",
+    "@capacitor/cli": "^8.3.2",
+    "@capacitor/core": "^8.3.2",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
   }
 }

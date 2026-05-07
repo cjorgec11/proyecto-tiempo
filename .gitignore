@@ -1,0 +1,30 @@
+# Dependencias
+node_modules/
+
+# Salidas de build
+dist-electron/
+www/
+
+# Android: artefactos generados por Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/*.iml
+android/app/*.iml
+
+# Logs
+*.log
+server.err.log
+server.out.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code (estado local de sesión)
+.claude/scheduled_tasks.lock

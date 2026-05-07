@@ -1,3 +1,6 @@
+// Modelo: estado de la aplicación, llamadas a APIs externas (rutas y tiempo)
+// y funciones de cálculo geográfico. Sin dependencias del DOM.
+
 export const state = {
   currentSegments: [],
   currentMode: "wind",
@@ -85,8 +88,7 @@ function interpolate(a, b, count) {
   });
 }
 
-const OSRM_BASE = "https://routing.openstreetmap.de/routed-bike";
-
+// Servidores OSRM públicos: uno por modo de ruta. Cada uno usa un perfil de calle distinto.
 const ROUTE_PROFILES = {
   mixto: { base: "https://routing.openstreetmap.de/routed-bike", profile: "cycling" },
   carretera: { base: "https://routing.openstreetmap.de/routed-car", profile: "driving" },
@@ -105,7 +107,9 @@ function classifyStep(step) {
 
 export async function snapToRoad(lat, lon) {
   try {
-    const response = await fetch(`${OSRM_BASE}/nearest/v1/cycling/${lon},${lat}?number=1`);
+    const response = await fetch(
+      `https://routing.openstreetmap.de/routed-bike/nearest/v1/cycling/${lon},${lat}?number=1`,
+    );
     if (!response.ok) return null;
     const data = await response.json();
     const wp = data.waypoints?.[0];
@@ -164,10 +168,6 @@ export async function routeAcross(points, mode = "mixto") {
       roadRatio: null,
     };
   }
-}
-
-export async function routeBetween(start, end, mode = "mixto") {
-  return routeAcross([start, end], mode);
 }
 
 export function pathDistance(points) {
@@ -292,20 +292,6 @@ function simplifyRoute(points, limit) {
   return simplified;
 }
 
-export async function geocode(city) {
-  const params = new URLSearchParams({ name: city, count: "1", language: "es", format: "json" });
-  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
-  if (!response.ok) throw new Error("No se pudo buscar la ciudad");
-  const data = await response.json();
-  if (!data.results?.length) throw new Error(`No encuentro "${city}"`);
-  const place = data.results[0];
-  return {
-    name: [place.name, place.admin1, place.country].filter(Boolean).join(", "),
-    lat: place.latitude,
-    lon: place.longitude,
-  };
-}
-
 export async function weatherFor(points, departure, totalDistance, speed) {
   const params = new URLSearchParams({
     latitude: points.map((p) => p.lat.toFixed(4)).join(","),
@@ -382,18 +368,6 @@ export function metricValue(segment, mode) {
   return Math.min(100, segment.gust * 1.4);
 }
 
-export function weatherBadge(code) {
-  if ([0, 1].includes(code)) return "Sol";
-  if ([2, 3].includes(code)) return "Nub";
-  if ([45, 48].includes(code)) return "Nie";
-  if ([51, 53, 55].includes(code)) return "Llv";
-  if ([61, 63, 65].includes(code)) return "Llu";
-  if ([71, 73, 75].includes(code)) return "Niv";
-  if ([80, 81, 82].includes(code)) return "Chu";
-  if (code === 95) return "Tor";
-  return "Var";
-}
-
 export function weatherEmoji(code) {
   if ([0, 1].includes(code)) return "☀️";
   if (code === 2) return "⛅";
@@ -415,23 +389,6 @@ export function windCompass(degrees) {
 export function isNighttime(date) {
   const h = date.getHours();
   return h < 6 || h >= 21;
-}
-
-export async function geocodeSuggest(query) {
-  if (query.length < 2) return [];
-  try {
-    const params = new URLSearchParams({ name: query, count: "5", language: "es", format: "json" });
-    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.results || []).map((p) => ({
-      label: [p.name, p.admin1, p.country].filter(Boolean).join(", "),
-      lat: p.latitude,
-      lon: p.longitude,
-    }));
-  } catch {
-    return [];
-  }
 }
 
 export function readSavedRoutes() {

@@ -56,9 +56,12 @@
                   <small id="routeSource">Marca puntos en el mapa</small>
                 </div>
 
-                <div class="plan-map-wrap">
+                <div class="plan-map-wrap" id="planMapWrap">
                   <div id="planMap" aria-label="Mapa para marcar puntos de la ruta"></div>
-                  <div class="plan-map-hint" id="planHint">Haz clic en el mapa para añadir puntos. El primero es la salida, el último la llegada.</div>
+                  <button type="button" class="map-fullscreen-btn" id="planFullscreenBtn" aria-label="Pantalla completa" title="Pantalla completa">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 9 4 4 9 4"/><polyline points="20 9 20 4 15 4"/><polyline points="4 15 4 20 9 20"/><polyline points="20 15 20 20 15 20"/></svg>
+                  </button>
+                  <div class="plan-map-hint" id="planHint">Toca el mapa para añadir puntos. El primero es la salida, el último la llegada.</div>
                 </div>
 
                 <div class="waypoint-toolbar">
