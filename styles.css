@@ -173,10 +173,18 @@ h1 {
 
 .single-column {
   grid-template-columns: 1fr;
+  justify-items: center;
 }
 
 .wide-panel {
   width: min(780px, 100%);
+  margin: 0 auto;
+}
+
+.ride-board {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .controls,
@@ -889,18 +897,13 @@ dd {
   color: #2a2200;
 }
 
-@media (max-width: 920px) {
-  .app {
-    padding: 16px;
-  }
-
-  .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
+@media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .wide-panel {
+    width: 100%;
   }
 
   .controls {
@@ -908,13 +911,54 @@ dd {
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 920px) {
+  .app {
+    padding: 16px;
+  }
+
+  .topbar {
+    min-height: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .topbar-right {
+    align-self: flex-end;
+  }
+
+  #planMap {
+    height: 260px;
+  }
+
+  #routeMap {
+    min-height: 320px;
+    aspect-ratio: auto;
+    height: 56vw;
+    max-height: 480px;
+  }
+
+  .map-fallback {
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 640px) {
   .app {
     padding: 12px;
   }
 
   h1 {
-    font-size: 2.18rem;
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+  }
+
+  .menu-button span {
+    font-size: 0.72rem;
+  }
+
+  .menu-button {
+    min-width: 0;
+    padding: 8px 4px;
   }
 
   .grid-2,
@@ -922,9 +966,18 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .grid-2 {
+    gap: 8px;
+  }
+
+  .controls {
+    padding: 14px;
+  }
+
   .timeline-head {
     align-items: flex-start;
     flex-direction: column;
+    gap: 8px;
   }
 
   .toggle-group {
@@ -935,11 +988,66 @@ dd {
     flex: 1;
   }
 
+  .waypoint-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .waypoint-actions {
+    justify-content: flex-end;
+  }
+
+  .save-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .connect-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-stack {
+    grid-template-columns: 1fr;
+  }
+
+  #planMap {
+    height: 220px;
+  }
+
+  #routeMap {
+    min-height: 260px;
+    height: 70vw;
+    max-height: 420px;
+  }
+
   .map-legend {
     left: 10px;
     right: 10px;
     justify-content: center;
     border-radius: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-menu {
+    gap: 4px;
+  }
+
+  .menu-button {
+    padding: 6px 2px;
+  }
+
+  .menu-button span {
+    font-size: 0.66rem;
+  }
+
+  .menu-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
   }
 }
 
@@ -1098,6 +1206,60 @@ dd {
 :root[data-theme="dark"] .theme-toggle {
   background: rgba(24, 40, 48, 0.85);
   border-color: var(--line);
+}
+
+/* ─── Modal ──────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 25, 30, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  width: min(420px, 92vw);
+  padding: 22px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  display: grid;
+  gap: 10px;
+}
+
+.modal h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.modal-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.modal label {
+  margin-top: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.modal-actions .secondary,
+.modal-actions .primary {
+  min-height: 38px;
+  padding: 0 16px;
 }
 
 /* ─── Autocomplete ───────────────────────────────────────────── */

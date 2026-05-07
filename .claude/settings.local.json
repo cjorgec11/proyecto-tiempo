@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(node \"c:\\\\Users\\\\jorge\\\\Desktop\\\\proyecto tiempo\\\\server.mjs\")",
-      "Bash(node server.mjs)"
+      "Bash(node server.mjs)",
+      "PowerShell(Get-Process | Where-Object {$_.ProcessName -match \"node|python|npm|vite|webpack\"} | Select-Object Id, ProcessName, MainWindowTitle)",
+      "PowerShell(npm start)"
     ]
   }
 }

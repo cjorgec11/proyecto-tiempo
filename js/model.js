@@ -9,6 +9,8 @@ export const state = {
   currentDistance: 0,
   currentDuration: 0,
   waypoints: [],
+  routeMode: "mixto",
+  currentRoadRatio: null,
 };
 
 export const weatherLabels = {
@@ -83,9 +85,27 @@ function interpolate(a, b, count) {
   });
 }
 
+const OSRM_BASE = "https://routing.openstreetmap.de/routed-bike";
+
+const ROUTE_PROFILES = {
+  mixto: { base: "https://routing.openstreetmap.de/routed-bike", profile: "cycling" },
+  carretera: { base: "https://routing.openstreetmap.de/routed-car", profile: "driving" },
+  caminos: { base: "https://routing.openstreetmap.de/routed-foot", profile: "walking" },
+};
+
+const PATH_NAME_RX = /camino|senda|vereda|pista|cañada|ca[nñ]ada|vía pecuaria|via pecuaria|track|trail|sendero|footway|path/i;
+
+function classifyStep(step) {
+  if (step.ref) return "road";
+  const name = (step.name || "").trim();
+  if (!name) return "path";
+  if (PATH_NAME_RX.test(name)) return "path";
+  return "road";
+}
+
 export async function snapToRoad(lat, lon) {
   try {
-    const response = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lon},${lat}?number=1`);
+    const response = await fetch(`${OSRM_BASE}/nearest/v1/cycling/${lon},${lat}?number=1`);
     if (!response.ok) return null;
     const data = await response.json();
     const wp = data.waypoints?.[0];
@@ -97,41 +117,57 @@ export async function snapToRoad(lat, lon) {
   }
 }
 
-export async function routeAcross(points) {
+export async function routeAcross(points, mode = "mixto") {
   if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa");
   const fallbackCoords = points.slice(1).reduce(
     (acc, point, index) => acc.concat(interpolate(points[index], point, 16).slice(index === 0 ? 0 : 1)),
     []
   );
+  const cfg = ROUTE_PROFILES[mode] || ROUTE_PROFILES.mixto;
   try {
     const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
     const params = new URLSearchParams({
       alternatives: "false",
-      steps: "false",
+      steps: "true",
       overview: "full",
       geometries: "geojson",
     });
-    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?${params}`);
+    const response = await fetch(`${cfg.base}/route/v1/${cfg.profile}/${coords}?${params}`);
     if (!response.ok) throw new Error("Ruta no disponible");
     const data = await response.json();
     const route = data.routes?.[0];
     if (!route?.geometry?.coordinates?.length) throw new Error("Ruta sin geometria");
+    let roadDist = 0;
+    let pathDist = 0;
+    (route.legs || []).forEach((leg) => {
+      (leg.steps || []).forEach((step) => {
+        const kind = classifyStep(step);
+        if (kind === "road") roadDist += step.distance || 0;
+        else pathDist += step.distance || 0;
+      });
+    });
+    const total = roadDist + pathDist;
+    const roadRatio = total > 0 ? roadDist / total : null;
     return {
       coords: route.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })),
       distance: route.distance / 1000,
       routed: true,
+      mode,
+      roadRatio,
     };
   } catch {
     return {
       coords: fallbackCoords,
       distance: pathDistance(fallbackCoords),
       routed: false,
+      mode,
+      roadRatio: null,
     };
   }
 }
 
-export async function routeBetween(start, end) {
-  return routeAcross([start, end]);
+export async function routeBetween(start, end, mode = "mixto") {
+  return routeAcross([start, end], mode);
 }
 
 export function pathDistance(points) {
@@ -193,6 +229,36 @@ export function routeSlice(points, startProgress, endProgress) {
   });
   slice.push(pointAtDistance(points, distances, endDistance));
   return slice.map((point) => [point.lat, point.lon]);
+}
+
+export function buildGpx(name, coords) {
+  const safeName = (name || "Ruta").replace(/[<>&]/g, "");
+  const points = coords
+    .map((c) => `      <trkpt lat="${c.lat.toFixed(6)}" lon="${c.lon.toFixed(6)}"></trkpt>`)
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RideCast" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${safeName}</name>
+    <trkseg>
+${points}
+    </trkseg>
+  </trk>
+</gpx>`;
+}
+
+export function downloadGpx(name, coords) {
+  const xml = buildGpx(name, coords);
+  const blob = new Blob([xml], { type: "application/gpx+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const filename = `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function parseRouteFile(text) {

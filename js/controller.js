@@ -1,5 +1,7 @@
 import {
   bearing,
+  downloadGpx,
+  haversine,
   parseRouteFile,
   pathDistance,
   readSavedRoutes,
@@ -11,7 +13,25 @@ import {
   weatherFor,
   writeSavedRoutes,
 } from "./model.js";
-import { dom, drawRoute, initPlanMap, initTheme, refreshPlanMap, renderSavedRoutes, renderSummary, renderTimeline, renderWaypoints, setStatus, setWindow, toggleTheme } from "./view.js";
+import { dom, drawRoute, initPlanMap, initTheme, refreshPlanMap, renderSavedRoutes, renderSummary, renderTimeline, renderWaypoints, setPlanRoutePreview, setStatus, setWindow, toggleTheme, updateSamplesRange } from "./view.js";
+
+let previewTimer = null;
+let previewToken = 0;
+function schedulePlanPreview() {
+  if (previewTimer) clearTimeout(previewTimer);
+  if (state.waypoints.length < 2 || state.waypoints.some((w) => w.snapping)) {
+    setPlanRoutePreview(null);
+    return;
+  }
+  previewTimer = setTimeout(async () => {
+    const token = ++previewToken;
+    try {
+      const route = await routeAcross(state.waypoints, state.routeMode);
+      if (token !== previewToken) return;
+      setPlanRoutePreview(route.coords);
+    } catch {}
+  }, 400);
+}
 
 export function initApp() {
   initTheme();
@@ -27,32 +47,51 @@ export function initApp() {
   setStatus("Listo");
 }
 
+function waypointDistance(points) {
+  let d = 0;
+  for (let i = 1; i < points.length; i += 1) d += haversine(points[i - 1], points[i]);
+  return d;
+}
+
+function refreshSamplesFromWaypoints() {
+  updateSamplesRange(state.waypoints.length >= 2 ? waypointDistance(state.waypoints) : 0);
+}
+
 async function addWaypoint(lat, lon) {
   const placeholder = { lat, lon, snapping: true };
   state.waypoints.push(placeholder);
   state.importedRoute = null;
   dom.routeSource.textContent = state.waypoints.length >= 2 ? "Puntos en el mapa" : "Marca puntos en el mapa";
   renderWaypoints(state.waypoints);
+  refreshSamplesFromWaypoints();
   const snapped = await snapToRoad(lat, lon);
   const index = state.waypoints.indexOf(placeholder);
   if (index === -1) return;
   state.waypoints[index] = snapped ? { lat: snapped.lat, lon: snapped.lon } : { lat, lon };
   renderWaypoints(state.waypoints);
+  refreshSamplesFromWaypoints();
+  schedulePlanPreview();
 }
 
 function undoWaypoint() {
   state.waypoints.pop();
   renderWaypoints(state.waypoints);
+  refreshSamplesFromWaypoints();
+  schedulePlanPreview();
 }
 
 function clearWaypoints() {
   state.waypoints = [];
   renderWaypoints(state.waypoints);
+  refreshSamplesFromWaypoints();
+  schedulePlanPreview();
 }
 
 function removeWaypointAt(index) {
   state.waypoints.splice(index, 1);
   renderWaypoints(state.waypoints);
+  refreshSamplesFromWaypoints();
+  schedulePlanPreview();
 }
 
 function bindEvents() {
@@ -60,9 +99,9 @@ function bindEvents() {
     button.addEventListener("click", () => setWindow(button.dataset.window));
   });
 
-  document.querySelectorAll(".chip").forEach((button) => {
+  document.querySelectorAll(".chip[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelectorAll(".chip").forEach((item) => item.classList.remove("active"));
+      document.querySelectorAll(".chip[data-mode]").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       state.currentMode = button.dataset.mode;
       if (state.currentSegments.length) {
@@ -72,13 +111,22 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll(".chip[data-route-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".chip[data-route-mode]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      state.routeMode = button.dataset.routeMode;
+      schedulePlanPreview();
+    });
+  });
+
   dom.samples.addEventListener("input", () => {
     dom.samplesOut.value = dom.samples.value;
   });
   dom.routeFile.addEventListener("change", handleRouteFile);
-  dom.stravaConnect.addEventListener("click", () => showConnectorNotice("Strava"));
-  dom.wikilocConnect.addEventListener("click", () => showConnectorNotice("Wikiloc"));
   dom.saveRoute.addEventListener("click", saveCurrentRoute);
+  dom.exportRoute?.addEventListener("click", exportCurrentRoute);
+  dom.exportPlanRoute?.addEventListener("click", exportPlanRoute);
   dom.savedRoutes.addEventListener("click", handleSavedRouteAction);
   dom.form.addEventListener("submit", calculate);
 
@@ -99,12 +147,20 @@ async function handleRouteFile(event) {
   try {
     setStatus("Importando");
     const parsed = parseRouteFile(await file.text());
+    const departure = await askDepartureDateTime();
+    if (!departure) {
+      event.target.value = "";
+      setStatus("Listo");
+      return;
+    }
+    dom.departure.value = departure;
     state.importedRoute = parsed;
     dom.routeSource.textContent = "Fichero";
     dom.importStatus.textContent = `${parsed.name}: ${parsed.coords.length} puntos`;
     state.currentRouteCoords = parsed.coords;
     state.currentStartName = parsed.name;
     state.currentEndName = "Meta";
+    updateSamplesRange(pathDistance(parsed.coords));
     drawRoute([], parsed.name, "Meta", 0, parsed.coords, state.currentMode);
     setWindow("forecast");
     setStatus("Listo");
@@ -116,8 +172,32 @@ async function handleRouteFile(event) {
   }
 }
 
-function showConnectorNotice(service) {
-  dom.importStatus.textContent = `${service}: conexion preparada. Para activar OAuth hacen falta claves/API del servicio.`;
+function askDepartureDateTime() {
+  return new Promise((resolve) => {
+    const modal = document.querySelector("#importModal");
+    const input = document.querySelector("#importDeparture");
+    const ok = document.querySelector("#importConfirm");
+    const cancel = document.querySelector("#importCancel");
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30, 0, 0);
+    const pad = (n) => String(n).padStart(2, "0");
+    input.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    modal.hidden = false;
+    const close = (value) => {
+      modal.hidden = true;
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      resolve(value);
+    };
+    const onOk = () => close(input.value || null);
+    const onCancel = () => close(null);
+    const onBackdrop = (e) => { if (e.target === modal) close(null); };
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+    setTimeout(() => input.focus(), 0);
+  });
 }
 
 function routeDefaultName() {
@@ -159,6 +239,41 @@ function handleSavedRouteAction(event) {
     writeSavedRoutes(readSavedRoutes().filter((route) => route.id !== button.dataset.id));
     renderSavedRoutes(readSavedRoutes());
   }
+  if (button.dataset.action === "export") {
+    const route = readSavedRoutes().find((r) => r.id === button.dataset.id);
+    if (route) downloadGpx(route.name, route.coords);
+  }
+}
+
+async function exportPlanRoute() {
+  try {
+    let coords = state.currentRouteCoords;
+    let name = routeDefaultName();
+    if (!coords?.length) {
+      if (state.waypoints.length < 2) {
+        setStatus("Marca al menos dos puntos");
+        return;
+      }
+      setStatus("Calculando ruta");
+      const route = await routeAcross(state.waypoints, state.routeMode);
+      coords = route.coords;
+      state.currentRouteCoords = coords;
+      setStatus("Listo");
+    }
+    downloadGpx(name, coords);
+  } catch (error) {
+    setStatus(error.message || "No se pudo exportar");
+  }
+}
+
+function exportCurrentRoute() {
+  if (!state.currentRouteCoords.length) {
+    dom.importStatus.textContent = "Calcula o importa una ruta antes de exportarla.";
+    setWindow("library");
+    return;
+  }
+  const name = dom.saveName.value.trim() || routeDefaultName();
+  downloadGpx(name, state.currentRouteCoords);
 }
 
 async function loadSavedRoute(id) {
@@ -170,6 +285,7 @@ async function loadSavedRoute(id) {
   state.currentEndName = route.endName || "Meta";
   dom.routeSource.textContent = "Guardada";
   dom.importStatus.textContent = `${route.name}: ruta cargada`;
+  updateSamplesRange(pathDistance(route.coords));
   drawRoute([], state.currentStartName, state.currentEndName, 0, state.currentRouteCoords, state.currentMode);
   await calculate();
   setWindow("forecast");
@@ -225,7 +341,7 @@ async function calculate(event) {
       if (state.waypoints.length < 2) {
         throw new Error("Marca al menos dos puntos en el mapa");
       }
-      route = await routeAcross(state.waypoints);
+      route = await routeAcross(state.waypoints, state.routeMode);
       start = state.waypoints[0];
       end = state.waypoints[state.waypoints.length - 1];
       state.currentStartName = `Salida ${start.lat.toFixed(3)}, ${start.lon.toFixed(3)}`;
@@ -234,6 +350,7 @@ async function calculate(event) {
     }
 
     const distance = route.distance;
+    updateSamplesRange(distance);
     const duration = distance / speed;
     const points = sampleRoute(route.coords, count);
     const rideBearing = bearing(start, end);
@@ -244,8 +361,9 @@ async function calculate(event) {
     state.currentRideBearing = rideBearing;
     state.currentDistance = distance;
     state.currentDuration = duration;
+    state.currentRoadRatio = route.roadRatio ?? null;
     renderTimeline(state.currentSegments, rideBearing, state.currentMode);
-    renderSummary(distance, duration, state.currentSegments, rideBearing);
+    renderSummary(distance, duration, state.currentSegments, rideBearing, state.currentRoadRatio);
     drawRoute(state.currentSegments, state.currentStartName, state.currentEndName, rideBearing, state.currentRouteCoords, state.currentMode);
     if (!state.importedRoute) autoSaveRoute();
     setStatus("Listo");
