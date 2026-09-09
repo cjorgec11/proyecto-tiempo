@@ -3,6 +3,9 @@ node_modules/
 
 # Salidas de build
 dist-electron/
+dist/
+.site-release/
+.site-artifacts/
 www/
 
 # Android: artefactos generados por Gradle

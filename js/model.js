@@ -77,97 +77,50 @@ export function bearing(a, b) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-function interpolate(a, b, count) {
-  return Array.from({ length: count }, (_, index) => {
-    const t = count === 1 ? 0 : index / (count - 1);
-    return {
-      lat: a.lat + (b.lat - a.lat) * t,
-      lon: a.lon + (b.lon - a.lon) * t,
-      progress: t,
-    };
-  });
-}
+const BIKE_SERVICE = "https://routing.openstreetmap.de/routed-bike";
 
-// Servidores OSRM públicos: uno por modo de ruta. Cada uno usa un perfil de calle distinto.
-const ROUTE_PROFILES = {
-  mixto: { base: "https://routing.openstreetmap.de/routed-bike", profile: "cycling" },
-  carretera: { base: "https://routing.openstreetmap.de/routed-car", profile: "driving" },
-  caminos: { base: "https://routing.openstreetmap.de/routed-foot", profile: "walking" },
-};
-
-const PATH_NAME_RX = /camino|senda|vereda|pista|cañada|ca[nñ]ada|vía pecuaria|via pecuaria|track|trail|sendero|footway|path/i;
-
-function classifyStep(step) {
-  if (step.ref) return "road";
-  const name = (step.name || "").trim();
-  if (!name) return "path";
-  if (PATH_NAME_RX.test(name)) return "path";
-  return "road";
+async function fetchJson(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(25000) });
+  if (!response.ok) throw new Error("El servicio no está disponible. Inténtalo de nuevo.");
+  return response.json();
 }
 
 export async function snapToRoad(lat, lon) {
   try {
-    const response = await fetch(
-      `https://routing.openstreetmap.de/routed-bike/nearest/v1/cycling/${lon},${lat}?number=1`,
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const wp = data.waypoints?.[0];
-    if (!wp?.location) return null;
-    const [snLon, snLat] = wp.location;
-    return { lat: snLat, lon: snLon };
+    const data = await fetchJson(`${BIKE_SERVICE}/nearest/v1/cycling/${lon},${lat}?number=1`);
+    const location = data.waypoints?.[0]?.location;
+    if (!location) return null;
+    const [snLon, snLat] = location;
+    const snapped = { lat: snLat, lon: snLon };
+    return validCoordinate(snapped) && haversine({ lat, lon }, snapped) < 2 ? snapped : null;
   } catch {
     return null;
   }
 }
 
-export async function routeAcross(points, mode = "mixto") {
-  if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa");
-  const fallbackCoords = points.slice(1).reduce(
-    (acc, point, index) => acc.concat(interpolate(points[index], point, 16).slice(index === 0 ? 0 : 1)),
-    []
-  );
-  const cfg = ROUTE_PROFILES[mode] || ROUTE_PROFILES.mixto;
+export async function routeAcross(points) {
+  if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa.");
+  if (points.length > 25) throw new Error("El máximo es de 25 puntos por recorrido.");
+  if (!points.every(validCoordinate)) throw new Error("Las coordenadas de la ruta no son válidas.");
   try {
     const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
-    const params = new URLSearchParams({
-      alternatives: "false",
-      steps: "true",
-      overview: "full",
-      geometries: "geojson",
-    });
-    const response = await fetch(`${cfg.base}/route/v1/${cfg.profile}/${coords}?${params}`);
-    if (!response.ok) throw new Error("Ruta no disponible");
-    const data = await response.json();
+    const params = new URLSearchParams({ alternatives: "false", steps: "false", overview: "full", geometries: "geojson" });
+    const data = await fetchJson(`${BIKE_SERVICE}/route/v1/cycling/${coords}?${params}`);
     const route = data.routes?.[0];
-    if (!route?.geometry?.coordinates?.length) throw new Error("Ruta sin geometria");
-    let roadDist = 0;
-    let pathDist = 0;
-    (route.legs || []).forEach((leg) => {
-      (leg.steps || []).forEach((step) => {
-        const kind = classifyStep(step);
-        if (kind === "road") roadDist += step.distance || 0;
-        else pathDist += step.distance || 0;
-      });
-    });
-    const total = roadDist + pathDist;
-    const roadRatio = total > 0 ? roadDist / total : null;
-    return {
-      coords: route.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })),
-      distance: route.distance / 1000,
-      routed: true,
-      mode,
-      roadRatio,
-    };
+    if (data.code !== "Ok" || !route?.geometry?.coordinates?.length || !(route.distance > 0)) {
+      throw new Error("Sin recorrido");
+    }
+    const geometry = route.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+    if (!geometry.every(validCoordinate)) throw new Error("Coordenadas no válidas");
+    return { coords: geometry, distance: route.distance / 1000, routed: true };
   } catch {
-    return {
-      coords: fallbackCoords,
-      distance: pathDistance(fallbackCoords),
-      routed: false,
-      mode,
-      roadRatio: null,
-    };
+    throw new Error("No se pudo trazar una ruta ciclista. Prueba con puntos más cercanos o importa un GPX.");
   }
+}
+
+export function validCoordinate(point) {
+  return point && Number.isFinite(point.lat) && Number.isFinite(point.lon)
+    && Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180;
 }
 
 export function pathDistance(points) {
@@ -232,7 +185,7 @@ export function routeSlice(points, startProgress, endProgress) {
 }
 
 export function buildGpx(name, coords) {
-  const safeName = (name || "Ruta").replace(/[<>&]/g, "");
+  const safeName = (name || "Ruta").replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]);
   const points = coords
     .map((c) => `      <trkpt lat="${c.lat.toFixed(6)}" lon="${c.lon.toFixed(6)}"></trkpt>`)
     .join("\n");
@@ -247,52 +200,37 @@ ${points}
 </gpx>`;
 }
 
-export function downloadGpx(name, coords) {
-  const xml = buildGpx(name, coords);
-  const blob = new Blob([xml], { type: "application/gpx+xml" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const filename = `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
-  a.href = url;
-  a.download = filename;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export function parseRouteFile(text) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(text, "application/xml");
-  if (doc.querySelector("parsererror")) throw new Error("El fichero no parece GPX o TCX valido");
-  const gpxPoints = [...doc.querySelectorAll("trkpt, rtept")].map((node) => ({
-    lat: Number(node.getAttribute("lat")),
-    lon: Number(node.getAttribute("lon")),
+  if (text.length > 10 * 1024 * 1024) throw new Error("El fichero supera los 10 MB.");
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("El fichero no es un GPX o TCX válido.");
+  const number = (value) => value == null || value.trim() === "" ? NaN : Number(value);
+  const tracks = [...doc.querySelectorAll("trkpt")];
+  const gpxNodes = tracks.length ? tracks : [...doc.querySelectorAll("rtept")];
+  const gpx = gpxNodes.map((node) => ({
+    lat: number(node.getAttribute("lat")), lon: number(node.getAttribute("lon")),
   }));
-  const tcxPoints = [...doc.querySelectorAll("Trackpoint Position")].map((node) => ({
-    lat: Number(node.querySelector("LatitudeDegrees")?.textContent),
-    lon: Number(node.querySelector("LongitudeDegrees")?.textContent),
+  const tcx = [...doc.querySelectorAll("Trackpoint Position")].map((node) => ({
+    lat: number(node.querySelector("LatitudeDegrees")?.textContent),
+    lon: number(node.querySelector("LongitudeDegrees")?.textContent),
   }));
-  const points = [...gpxPoints, ...tcxPoints].filter(
-    (point) => Number.isFinite(point.lat) && Number.isFinite(point.lon)
-  );
-  if (points.length < 2) throw new Error("La ruta necesita al menos dos puntos");
+  const points = gpx.length ? gpx : tcx;
+  if (points.length < 2) throw new Error("La ruta necesita al menos dos puntos.");
+  if (points.length > 50000) throw new Error("La ruta supera los 50.000 puntos.");
+  if (!points.every(validCoordinate)) throw new Error("El fichero contiene coordenadas incompletas o no válidas.");
+  if (pathDistance(points) < 0.01) throw new Error("El recorrido es demasiado corto.");
   return {
-    coords: simplifyRoute(points, 600),
-    name: doc.querySelector("trk > name, rte > name, Course > Name")?.textContent?.trim() || "Ruta importada",
+    coords: points,
+    name: (doc.querySelector("trk > name, rte > name, Course > Name")?.textContent?.trim() || "Ruta importada").slice(0, 100),
   };
 }
 
-function simplifyRoute(points, limit) {
-  if (points.length <= limit) return points;
-  const step = Math.ceil(points.length / limit);
-  const simplified = points.filter((_, index) => index % step === 0);
-  const last = points[points.length - 1];
-  if (simplified[simplified.length - 1] !== last) simplified.push(last);
-  return simplified;
-}
-
 export async function weatherFor(points, departure, totalDistance, speed) {
+  if (!Number.isFinite(departure.getTime()) || departure.getTime() < Date.now() - 3600000) {
+    throw new Error("Elige una fecha de salida actual o futura.");
+  }
+  if (!(speed >= 8 && speed <= 45) || !(totalDistance > 0)) throw new Error("Revisa la distancia y la velocidad.");
+  if (!points.length) throw new Error("La ruta no contiene puntos de previsión.");
   const params = new URLSearchParams({
     latitude: points.map((p) => p.lat.toFixed(4)).join(","),
     longitude: points.map((p) => p.lon.toFixed(4)).join(","),
@@ -306,20 +244,25 @@ export async function weatherFor(points, departure, totalDistance, speed) {
       "wind_direction_10m",
     ].join(","),
     wind_speed_unit: "kmh",
-    timezone: "auto",
+    timezone: "UTC",
+    timeformat: "unixtime",
     forecast_days: "7",
   });
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
-  if (!response.ok) throw new Error("No se pudo cargar el tiempo");
-  const data = await response.json();
+  const data = await fetchJson(`https://api.open-meteo.com/v1/forecast?${params}`);
   const blocks = Array.isArray(data) ? data : [data];
   return points.map((point, index) => {
     const arrival = new Date(departure.getTime() + ((totalDistance * point.progress) / speed) * 3600000);
     const block = blocks[index];
-    const weatherIndex = nearestHourIndex(block.hourly.time, arrival);
-    const hourly = block.hourly;
+    const hourly = block?.hourly;
+    if (!hourly?.time?.length) throw new Error("No hay datos para todos los puntos de esta ruta.");
+    const weatherIndex = nearestHourIndex(hourly.time, arrival);
+    const required = ["temperature_2m", "precipitation_probability", "precipitation", "weather_code", "wind_speed_10m", "wind_gusts_10m", "wind_direction_10m"];
+    if (required.some((key) => !Number.isFinite(hourly[key]?.[weatherIndex]))) {
+      throw new Error("La previsión está incompleta para este recorrido. Prueba con otra fecha.");
+    }
     return {
       ...point,
+      heading: index < points.length - 1 ? bearing(point, points[index + 1]) : bearing(points[Math.max(0, index - 1)], point),
       km: totalDistance * point.progress,
       arrival,
       temperature: hourly.temperature_2m[weatherIndex],
@@ -333,12 +276,15 @@ export async function weatherFor(points, departure, totalDistance, speed) {
   });
 }
 
-function nearestHourIndex(times, date) {
+export function nearestHourIndex(times, date) {
   const target = date.getTime();
+  if (!times.length || target < times[0] * 1000 || target > times[times.length - 1] * 1000) {
+    throw new Error("La salida o llegada queda fuera de los 7 días de previsión disponibles.");
+  }
   let best = 0;
   let diff = Infinity;
   times.forEach((time, index) => {
-    const nextDiff = Math.abs(new Date(time).getTime() - target);
+    const nextDiff = Math.abs(time * 1000 - target);
     if (nextDiff < diff) {
       best = index;
       diff = nextDiff;
@@ -348,7 +294,7 @@ function nearestHourIndex(times, date) {
 }
 
 export function riskFor(segment, rideBearing) {
-  const angle = Math.abs((((segment.windDirection - rideBearing + 540) % 360) - 180));
+  const angle = Math.abs((((segment.windDirection - (segment.heading ?? rideBearing) + 540) % 360) - 180));
   const headwind = Math.max(0, segment.wind * Math.cos((angle * Math.PI) / 180));
   const score =
     headwind * 1.25 +
@@ -394,12 +340,21 @@ export function isNighttime(date) {
 export function readSavedRoutes() {
   try {
     const routes = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(routes) ? routes : [];
+    if (!Array.isArray(routes) || routes.some((route) =>
+      !route || typeof route.id !== "string" || typeof route.name !== "string"
+      || !Array.isArray(route.coords) || route.coords.length < 2 || !route.coords.every(validCoordinate))) {
+      throw new Error("Datos no válidos");
+    }
+    return routes;
   } catch {
-    return [];
+    throw new Error("No se puede leer la colección guardada en este navegador. No se han modificado tus datos.");
   }
 }
 
 export function writeSavedRoutes(routes) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
+  } catch {
+    throw new Error("No se pudo guardar: almacenamiento lleno o bloqueado. Exporta la ruta como GPX.");
+  }
 }

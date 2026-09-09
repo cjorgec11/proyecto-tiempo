@@ -8,6 +8,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
     "electron": "electron .",
     "build:win": "electron-builder --win --x64",
     "cap:sync": "cap sync android",
@@ -22,6 +24,8 @@
       "app.js",
       "index.html",
       "styles.css",
+      "workspace.css",
+      "vendor/**/*",
       "package.json"
     ],
     "directories": {
@@ -49,6 +53,11 @@
     "@capacitor/cli": "^8.3.2",
     "@capacitor/core": "^8.3.2",
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "jsdom": "26.1.0"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "lucide": "0.468.0"
   }
 }

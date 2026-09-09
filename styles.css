@@ -35,9 +35,10 @@ input {
 }
 
 .app {
-  width: min(1500px, 100%);
-  margin: 0 auto;
-  padding: 24px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .topbar {
@@ -978,7 +979,7 @@ body.map-fullscreen-open {
 
 @media (max-width: 920px) {
   .app {
-    padding: 16px;
+    padding: 0;
   }
 
   .topbar {
@@ -1010,7 +1011,7 @@ body.map-fullscreen-open {
 
 @media (max-width: 640px) {
   .app {
-    padding: 12px;
+    padding: 0;
   }
 
   h1 {

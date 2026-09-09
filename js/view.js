@@ -1,459 +1,365 @@
-// Vista: todo lo relacionado con pintar en el DOM y gestionar los mapas Leaflet.
-// No contiene lógica de negocio. El controlador (controller.js) la coordina.
+// Vista: DOM, mapas e interacción visual. El controlador coordina los datos.
+import { buildGpx, metricValue, pathDistance, riskFor, routeSlice, weatherLabels, windCompass } from "./model.js";
 
-import {
-  isNighttime,
-  metricValue,
-  pathDistance,
-  riskFor,
-  routeSlice,
-  weatherEmoji,
-  weatherLabels,
-  windCompass,
-} from "./model.js";
+const ids = ["timeline", "samples", "samplesOut", "summaryCards", "planMapWrap", "planFullscreenBtn",
+  "waypointList", "waypointCount", "undoWaypoint", "clearWaypoints", "routeFile", "importStatus",
+  "routeSource", "saveName", "saveRoute", "exportRoute", "exportPlanRoute", "savedRoutes", "savedCount", "departure"];
+export const dom = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+Object.assign(dom, {
+  form: document.querySelector("#rideForm"), template: document.querySelector("#segmentTemplate"),
+  routeMapEl: document.querySelector("#routeMap"), planMapEl: document.querySelector("#planMap"),
+  menuButtons: document.querySelectorAll(".menu-button"), windowPanels: document.querySelectorAll(".window"),
+});
 
-// Referencias rápidas a elementos del DOM que se usan a menudo.
-export const dom = {
-  form: document.querySelector("#rideForm"),
-  timeline: document.querySelector("#timeline"),
-  template: document.querySelector("#segmentTemplate"),
-  samples: document.querySelector("#samples"),
-  samplesOut: document.querySelector("#samplesOut"),
-  summaryCards: document.querySelector("#summaryCards"),
-  routeMapEl: document.querySelector("#routeMap"),
-  planMapEl: document.querySelector("#planMap"),
-  planMapWrap: document.querySelector("#planMapWrap"),
-  planFullscreenBtn: document.querySelector("#planFullscreenBtn"),
-  planHint: document.querySelector("#planHint"),
-  waypointList: document.querySelector("#waypointList"),
-  waypointCount: document.querySelector("#waypointCount"),
-  undoWaypoint: document.querySelector("#undoWaypoint"),
-  clearWaypoints: document.querySelector("#clearWaypoints"),
-  routeFile: document.querySelector("#routeFile"),
-  importStatus: document.querySelector("#importStatus"),
-  routeSource: document.querySelector("#routeSource"),
-  saveName: document.querySelector("#saveName"),
-  saveRoute: document.querySelector("#saveRoute"),
-  exportRoute: document.querySelector("#exportRoute"),
-  exportPlanRoute: document.querySelector("#exportPlanRoute"),
-  savedRoutes: document.querySelector("#savedRoutes"),
-  savedCount: document.querySelector("#savedCount"),
-  departure: document.querySelector("#departure"),
-  menuButtons: document.querySelectorAll(".menu-button"),
-  windowPanels: document.querySelectorAll(".window"),
-};
+export function icon(name) {
+  const definition = window.lucide?.icons[name];
+  if (!definition) return document.createElement("span");
+  const element = window.lucide.createElement(definition);
+  element.classList.add("lucide");
+  element.setAttribute("aria-hidden", "true");
+  return element;
+}
 
-// Mapas Leaflet (uno para planificar y otro para ver el resultado).
-let mapaRuta;
-let capaRuta;
-let mapaPlan;
-let capaMarcadoresPlan;
-let capaLineaPlan;
+export function initIcons() {
+  window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
+}
 
-// URL de los tiles de OpenStreetMap (mismo servidor para ambos mapas).
-const TILES_OSM = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const ATRIBUCION_OSM =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+export function showStatus(message, type = "info") {
+  const status = document.querySelector("#appStatus");
+  status.hidden = !message;
+  status.dataset.type = type;
+  status.textContent = message;
+}
 
-// Inicializa el mapa de planificación. Recibe la función a llamar al hacer clic.
-export function initPlanMap(alPulsar) {
-  if (!window.L || !dom.planMapEl) return null;
-  if (mapaPlan) return mapaPlan;
-  mapaPlan = L.map(dom.planMapEl, { scrollWheelZoom: true, zoomControl: true })
-    .setView([40.4168, -3.7038], 6);
-  L.tileLayer(TILES_OSM, { attribution: ATRIBUCION_OSM, maxZoom: 19 }).addTo(mapaPlan);
+let mapaRuta, capaRuta, mapaPlan, capaMarcadoresPlan, capaLineaPlan;
+let routeBounds = null, pendingFit = false, lastCoords = null;
+const tiles = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
+function makeMap(element, zoom) {
+  if (!window.L) {
+    element.innerHTML = '<div class="map-fallback">El mapa no está disponible. Revisa la conexión y recarga la página.</div>';
+    return null;
+  }
+  const map = L.map(element, { scrollWheelZoom: true }).setView([40.4168, -3.7038], zoom);
+  L.tileLayer(tiles, { attribution, maxZoom: 19 }).addTo(map);
+  return map;
+}
+
+export function initPlanMap(onClick) {
+  if (mapaPlan) return;
+  mapaPlan = makeMap(dom.planMapEl, 6);
+  if (!mapaPlan) return;
   capaMarcadoresPlan = L.layerGroup().addTo(mapaPlan);
   capaLineaPlan = L.layerGroup().addTo(mapaPlan);
-  mapaPlan.on("click", (evento) => alPulsar(evento.latlng.lat, evento.latlng.lng));
-  return mapaPlan;
+  mapaPlan.on("click", (event) => onClick(event.latlng.lat, event.latlng.lng));
+  new ResizeObserver(() => mapaPlan.invalidateSize()).observe(dom.planMapEl);
 }
 
-// Tras cambiar de tamaño el contenedor, hay que avisar a Leaflet.
 export function refreshPlanMap() {
-  if (mapaPlan) setTimeout(() => mapaPlan.invalidateSize(), 0);
+  requestAnimationFrame(() => mapaPlan?.invalidateSize());
 }
 
-// Alterna el modo pantalla completa del mapa de planificación.
 export function togglePlanFullscreen() {
-  if (!dom.planMapWrap) return;
-  const activo = dom.planMapWrap.classList.toggle("fullscreen");
-  document.body.classList.toggle("map-fullscreen-open", activo);
-  if (dom.planFullscreenBtn) {
-    dom.planFullscreenBtn.setAttribute(
-      "aria-label",
-      activo ? "Salir de pantalla completa" : "Pantalla completa",
-    );
-  }
-  // Leaflet necesita recalcular dimensiones al cambiar el contenedor.
+  const active = dom.planMapWrap.classList.toggle("fullscreen");
+  document.body.classList.toggle("map-fullscreen-open", active);
+  const label = active ? "Salir de pantalla completa" : "Pantalla completa";
+  dom.planFullscreenBtn.setAttribute("aria-label", label);
+  dom.planFullscreenBtn.title = label;
+  dom.planFullscreenBtn.replaceChildren(icon(active ? "Minimize" : "Maximize"));
   refreshPlanMap();
 }
 
-// Crea el icono coloreado de un punto (salida, llegada o intermedio).
-function iconoPunto(etiqueta, tipo) {
-  return L.divIcon({
-    className: "",
-    html: `<div class="waypoint-marker ${tipo}">${etiqueta}</div>`,
-    iconAnchor: [13, 13],
-  });
-}
-
-// Pinta la lista de puntos y los marcadores en el mapa.
-export function renderWaypoints(puntos) {
-  dom.waypointCount.textContent = `${puntos.length} ${puntos.length === 1 ? "punto" : "puntos"}`;
-  dom.waypointList.textContent = "";
-  puntos.forEach((punto, indice) => {
-    const li = document.createElement("li");
-    li.className = "waypoint-item";
-    const rol =
-      indice === 0
-        ? "Salida"
-        : indice === puntos.length - 1
-          ? "Llegada"
-          : `Punto ${indice}`;
-    const etiqueta = document.createElement("span");
-    etiqueta.innerHTML = `<strong>${rol}</strong> · ${punto.lat.toFixed(4)}, ${punto.lon.toFixed(4)}`;
-    const botonQuitar = document.createElement("button");
-    botonQuitar.type = "button";
-    botonQuitar.className = "mini-button danger-button";
-    botonQuitar.textContent = "×";
-    botonQuitar.dataset.action = "remove-waypoint";
-    botonQuitar.dataset.index = String(indice);
-    li.append(etiqueta, botonQuitar);
-    dom.waypointList.append(li);
-  });
-
-  if (!capaMarcadoresPlan || !capaLineaPlan) return;
-  capaMarcadoresPlan.clearLayers();
-  capaLineaPlan.clearLayers();
-  if (!puntos.length) return;
-  puntos.forEach((punto, indice) => {
-    const esUltimo = indice === puntos.length - 1 && puntos.length > 1;
-    const tipo = indice === 0 ? "start" : esUltimo ? "end" : "via";
-    const etiqueta = indice === 0 ? "S" : esUltimo ? "L" : String(indice);
-    L.marker([punto.lat, punto.lon], { icon: iconoPunto(etiqueta, tipo) }).addTo(
-      capaMarcadoresPlan,
-    );
-  });
-  if (puntos.length > 1) {
-    const coordenadas = puntos.map((p) => [p.lat, p.lon]);
-    L.polyline(coordenadas, {
-      color: "#0c8f7a",
-      weight: 3,
-      opacity: 0.45,
-      dashArray: "4 6",
-    }).addTo(capaLineaPlan);
-    if (puntos.length === 2) {
-      mapaPlan.fitBounds(L.latLngBounds(coordenadas), { padding: [40, 40], maxZoom: 11 });
+export function renderWaypoints(points) {
+  dom.waypointCount.textContent = `${points.length} ${points.length === 1 ? "punto" : "puntos"}`;
+  dom.undoWaypoint.disabled = !points.length;
+  dom.waypointList.replaceChildren();
+  capaMarcadoresPlan?.clearLayers();
+  capaLineaPlan?.clearLayers();
+  points.forEach((point, index) => {
+    const end = index === points.length - 1 && index > 0;
+    const role = index === 0 ? "Salida" : end ? "Llegada" : `Punto ${index}`;
+    const item = document.createElement("li");
+    item.className = "waypoint-item";
+    const label = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = role;
+    label.append(name, ` · ${point.snapping ? "Ajustando…" : point.lat.toFixed(4) + ", " + point.lon.toFixed(4)}`);
+    const remove = actionButton("Quitar " + role.toLowerCase(), "remove-waypoint", String(index), "X");
+    remove.dataset.index = String(index);
+    item.append(label, remove);
+    dom.waypointList.append(item);
+    if (capaMarcadoresPlan) {
+      L.marker([point.lat, point.lon], {
+        title: role,
+        icon: L.divIcon({ className: "", html: `<div class="waypoint-marker ${end ? "end" : ""}">${index === 0 ? "S" : end ? "L" : index}</div>`, iconSize: [28,28], iconAnchor: [14,14] }),
+      }).addTo(capaMarcadoresPlan);
     }
+  });
+  if (points.length > 1 && capaLineaPlan) {
+    L.polyline(points.map((p) => [p.lat, p.lon]), { color: "#087e6e", weight: 3, opacity: .5, dashArray: "4 6" }).addTo(capaLineaPlan);
   }
 }
 
-// Muestra una previsualización de la ruta calculada por OSRM en el mapa de planificación.
-export function setPlanRoutePreview(coordenadas) {
+export function setPlanRoutePreview(coords, fit = false) {
   if (!capaLineaPlan) return;
   capaLineaPlan.clearLayers();
-  if (!coordenadas || coordenadas.length < 2) return;
-  const latLngs = coordenadas.map((c) => [c.lat, c.lon]);
-  L.polyline(latLngs, { color: "#0c8f7a", weight: 4, opacity: 0.85 }).addTo(capaLineaPlan);
-  if (mapaPlan) mapaPlan.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40], maxZoom: 13 });
+  if (!coords?.length) return;
+  const latLngs = coords.map((p) => [p.lat, p.lon]);
+  L.polyline(latLngs, { color: "#087e6e", weight: 4 }).addTo(capaLineaPlan);
+  if (fit) requestAnimationFrame(() => {
+    mapaPlan.invalidateSize();
+    mapaPlan.fitBounds(L.latLngBounds(latLngs), { padding: [35,35], maxZoom: 14 });
+  });
 }
 
-// Ajusta el rango del slider de tramos según la distancia total de la ruta.
-export function updateSamplesRange(distanciaKm) {
-  if (!dom.samples) return;
-  const min = 4;
-  let max;
-  if (!distanciaKm || distanciaKm <= 0) max = 12;
-  else max = Math.max(min, Math.min(30, Math.round(distanciaKm / 6)));
-  dom.samples.min = String(min);
-  dom.samples.max = String(max);
-  if (Number(dom.samples.value) > max) dom.samples.value = String(max);
-  if (Number(dom.samples.value) < min) dom.samples.value = String(min);
-  if (dom.samplesOut) dom.samplesOut.value = dom.samples.value;
-  const filaRango = dom.samples.parentElement?.querySelector(".range-row");
-  if (filaRango) {
-    const spans = filaRango.querySelectorAll("span");
-    if (spans[0]) spans[0].textContent = String(min);
-    if (spans[1]) spans[1].textContent = String(max);
-  }
+export function updateSamplesRange() {
+  dom.samplesOut.value = dom.samples.value;
 }
 
-// Cambia la pestaña visible (planificar, rutas, mapa y tiempo).
-export function setWindow(nombre) {
-  dom.menuButtons.forEach((boton) =>
-    boton.classList.toggle("active", boton.dataset.window === nombre),
-  );
-  dom.windowPanels.forEach((panel) =>
-    panel.classList.toggle("active", panel.dataset.windowPanel === nombre),
-  );
-  if (nombre === "forecast" && mapaRuta) setTimeout(() => mapaRuta.invalidateSize(), 0);
-  if (nombre === "plan" && mapaPlan) setTimeout(() => mapaPlan.invalidateSize(), 0);
+const pages = { plan: ["Tu próxima salida", "PLANIFICADOR"], library: ["Mis rutas", "COLECCIÓN"], forecast: ["Previsión de la ruta", "TIEMPO"] };
+export function setWindow(name) {
+  if (!pages[name]) name = "plan";
+  dom.menuButtons.forEach((button) => {
+    const active = button.dataset.window === name;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  dom.windowPanels.forEach((panel) => {
+    const active = panel.dataset.windowPanel === name;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+  document.querySelector("#pageTitle").textContent = pages[name][0];
+  document.querySelector("#pageEyebrow").textContent = pages[name][1];
+  document.title = `RideCast | ${pages[name][0]}`;
+  if (location.hash !== "#" + name) location.hash = name;
+  if (name === "plan") refreshPlanMap();
+  if (name === "forecast") requestAnimationFrame(() => {
+    mapaRuta?.invalidateSize();
+    if (pendingFit) fitRoute();
+  });
 }
 
-// Pinta las tarjetas de cada tramo en la línea temporal.
-export function renderTimeline(tramos, rumboRuta, modo) {
-  dom.timeline.textContent = "";
-  if (!tramos.length) {
-    const vacio = document.createElement("div");
-    vacio.className = "empty";
-    vacio.textContent = "Calcula una ruta";
-    dom.timeline.append(vacio);
+function weatherIcon(code) {
+  if (code === 0 || code === 1) return "Sun";
+  if (code === 2) return "CloudSun";
+  if (code === 3) return "Cloud";
+  if ([45,48].includes(code)) return "CloudFog";
+  if (code >= 95) return "CloudLightning";
+  if ([71,73,75,77,85,86].includes(code)) return "CloudSnow";
+  if ([51,53,55,56,57].includes(code)) return "CloudDrizzle";
+  return "CloudRain";
+}
+
+export function renderTimeline(segments, heading, mode) {
+  dom.timeline.replaceChildren();
+  if (!segments.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "Todavía no hay una previsión para esta ruta.";
+    dom.timeline.append(empty);
     return;
   }
-
-  tramos.forEach((tramo) => {
-    const riesgo = riskFor(tramo, rumboRuta);
-    const [titulo] = weatherLabels[tramo.code] || ["Variable"];
-    const tarjeta = dom.template.content.firstElementChild.cloneNode(true);
-    tarjeta.dataset.risk = riesgo;
-    const esNoche = isNighttime(tramo.arrival);
-    tarjeta.querySelector(".segment-km").textContent = `${Math.round(tramo.km)} km`;
-    tarjeta.querySelector(".segment-name").textContent = titulo;
-    tarjeta.querySelector(".weather-icon").textContent = weatherEmoji(tramo.code);
-    const hora = tramo.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-    const brujula = windCompass(tramo.windDirection);
-    tarjeta.querySelector(".segment-meta").textContent =
-      `${esNoche ? "🌙 " : ""}${hora} · ${Math.round(tramo.wind)} km/h ${brujula}`;
-    tarjeta.querySelector(".temp").textContent = `${Math.round(tramo.temperature)}°C`;
-    tarjeta.querySelector(".wind").textContent = `${Math.round(tramo.wind)} km/h`;
-    tarjeta.querySelector(".gust").textContent = `${Math.round(tramo.gust)} km/h`;
-    tarjeta.querySelector(".rain").textContent = `${tramo.rainChance}%`;
-    const barra = tarjeta.querySelector(".bar-fill");
-    barra.style.width = `${metricValue(tramo, modo)}%`;
-    barra.style.background =
-      riesgo === "bad"
-        ? "var(--danger)"
-        : riesgo === "watch"
-          ? "var(--accent-2)"
-          : "var(--accent)";
-    dom.timeline.append(tarjeta);
+  segments.forEach((segment) => {
+    const risk = riskFor(segment, heading);
+    const card = dom.template.content.firstElementChild.cloneNode(true);
+    card.dataset.risk = risk;
+    card.querySelector(".segment-km").textContent = `${segment.km.toFixed(1)} km`;
+    card.querySelector(".segment-name").textContent = weatherLabels[segment.code]?.[0] || "Variable";
+    card.querySelector(".weather-icon").replaceChildren(icon(weatherIcon(segment.code)));
+    card.querySelector(".segment-meta").textContent = segment.arrival.toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    card.querySelector(".temp").textContent = `${Math.round(segment.temperature)} °C`;
+    card.querySelector(".wind").textContent = `${Math.round(segment.wind)} km/h ${windCompass(segment.windDirection)}`;
+    card.querySelector(".gust").textContent = `${Math.round(segment.gust)} km/h`;
+    card.querySelector(".rain").textContent = `${Math.round(segment.rainChance)} %`;
+    card.querySelector(".bar-fill").style.cssText = `width:${metricValue(segment, mode)}%;background:${riskColor(risk)}`;
+    dom.timeline.append(card);
   });
 }
 
-// Pinta las tarjetas resumen (distancia, duración, riesgo, % carretera).
-export function renderSummary(distancia, duracionHoras, tramos, rumboRuta, ratioCarretera) {
-  const riesgos = tramos.map((t) => riskFor(t, rumboRuta));
-  const malos = riesgos.filter((r) => r === "bad").length;
-  const vigilar = riesgos.filter((r) => r === "watch").length;
-  const etiquetaRiesgo = malos ? "Duro" : vigilar ? "Vigilar" : "Bueno";
-  const horas = Math.floor(duracionHoras);
-  const minutos = Math.round((duracionHoras - horas) * 60);
-  const tarjetaCarretera = Number.isFinite(ratioCarretera)
-    ? `<article class="metric"><span>Carretera</span><strong>${Math.round(ratioCarretera * 100)}%</strong></article>`
-    : "";
-  dom.summaryCards.innerHTML = `
-    <article class="metric"><span>Distancia</span><strong>${Math.round(distancia)} km</strong></article>
-    <article class="metric"><span>Duracion</span><strong>${horas} h ${String(minutos).padStart(2, "0")} m</strong></article>
-    <article class="metric"><span>Riesgo</span><strong>${etiquetaRiesgo}</strong></article>
-    ${tarjetaCarretera}
-  `;
+export function renderSummary(distance = 0, hours = 0, segments = [], heading = 0) {
+  const minutes = Math.round(hours * 60);
+  const risks = segments.map((segment) => riskFor(segment, heading));
+  const temps = segments.map((segment) => segment.temperature);
+  const conditions = risks.includes("bad") ? "Exigentes" : risks.includes("watch") ? "Atención" : "Favorables";
+  const values = [
+    ["Distancia", distance ? `${distance.toFixed(1)} km` : "—"],
+    ["Duración estimada", distance ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : "—"],
+    ["Temperatura", temps.length ? `${Math.round(Math.min(...temps))} a ${Math.round(Math.max(...temps))} °C` : "—"],
+    ["Condiciones", segments.length ? conditions : "—"],
+  ];
+  dom.summaryCards.replaceChildren(...values.map(([label, value]) => {
+    const article = document.createElement("article");
+    article.className = "metric";
+    const title = document.createElement("span");
+    title.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    article.append(title, strong);
+    return article;
+  }));
 }
 
-// Inicializa el mapa de la pestaña "Mapa y tiempo" la primera vez que se necesita.
-function initMapaRuta() {
-  if (!window.L) {
-    dom.routeMapEl.innerHTML = '<div class="map-fallback">No se pudo cargar el mapa.</div>';
-    return false;
+function riskColor(risk) {
+  return risk === "bad" ? "#ce534b" : risk === "watch" ? "#bd891d" : "#087e6e";
+}
+
+function metricPin(segment, mode) {
+  let name, color;
+  if (mode === "rain") {
+    name = segment.rainChance >= 70 ? "CloudRain" : segment.rainChance >= 30 ? "CloudDrizzle" : "Droplet";
+    color = segment.rainChance >= 70 ? "#2756ac" : segment.rainChance >= 30 ? "#277fa4" : "#087e6e";
+  } else if (mode === "temp") {
+    name = segment.temperature <= 6 ? "ThermometerSnowflake" : segment.temperature >= 28 ? "ThermometerSun" : "Thermometer";
+    color = segment.temperature <= 6 ? "#2756ac" : segment.temperature >= 32 ? "#ce534b" : segment.temperature >= 24 ? "#aa7611" : "#087e6e";
+  } else {
+    name = segment.wind < 2 ? "Wind" : "ArrowUp";
+    color = segment.gust >= 45 ? "#ce534b" : segment.gust >= 28 ? "#aa7611" : "#087e6e";
   }
-  if (mapaRuta) return true;
-  mapaRuta = L.map(dom.routeMapEl, { scrollWheelZoom: true, zoomControl: true })
-    .setView([40.4168, -3.7038], 7);
-  L.tileLayer(TILES_OSM, { attribution: ATRIBUCION_OSM, maxZoom: 19 }).addTo(mapaRuta);
-  capaRuta = L.layerGroup().addTo(mapaRuta);
-  return true;
+  const pin = document.createElement("div");
+  pin.className = "weather-pin";
+  pin.style.setProperty("--pin-color", color);
+  const glyph = icon(name);
+  if (mode === "wind" && segment.wind >= 2) glyph.style.transform = `rotate(${(segment.windDirection + 180) % 360}deg)`;
+  pin.append(glyph);
+  return L.divIcon({ className: "", html: pin, iconSize: [34,34], iconAnchor: [17,17], popupAnchor: [0,-18], tooltipAnchor: [0,-18] });
 }
 
-// Devuelve el color asociado al riesgo de un tramo.
-function colorRiesgo(riesgo) {
-  if (riesgo === "bad") return "#d84f3f";
-  if (riesgo === "watch") return "#f0b429";
-  return "#0c8f7a";
+function tooltip(segment, index, count) {
+  const box = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = `${index === 0 ? "Salida · " : index === count - 1 ? "Llegada · " : ""}${segment.km.toFixed(1)} km · ${weatherLabels[segment.code]?.[0] || "Variable"}`;
+  box.append(strong);
+  [
+    segment.arrival.toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    `Temperatura: ${Math.round(segment.temperature)} °C`,
+    `Viento: ${Math.round(segment.wind)} km/h desde ${windCompass(segment.windDirection)}`,
+    `Rachas: ${Math.round(segment.gust)} km/h`,
+    `Lluvia: ${Math.round(segment.rainChance)} % · ${segment.precipitation} mm`,
+  ].forEach((text) => { box.append(document.createElement("br"), text); });
+  return box;
 }
 
-// Crea un icono Leaflet a partir de HTML para usar en el mapa de ruta.
-function iconoMarcador(claseCss, etiqueta) {
-  return L.divIcon({
-    className: "",
-    html: `<div class="${claseCss}">${etiqueta}</div>`,
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14],
-  });
+export function fitRoute() {
+  if (!mapaRuta || !routeBounds || !dom.routeMapEl.offsetWidth) return;
+  mapaRuta.invalidateSize();
+  mapaRuta.fitBounds(routeBounds, { padding: [45,45], maxZoom: 14 });
+  pendingFit = false;
 }
 
-function limitar(valor, min, max) {
-  return Math.max(min, Math.min(max, valor));
-}
-
-// Color del marcador según la métrica seleccionada (viento/lluvia/temperatura).
-function colorMetrica(tramo, modo) {
-  if (modo === "rain") {
-    if (tramo.rainChance >= 70) return "#2563eb";
-    if (tramo.rainChance >= 35) return "#38bdf8";
-    return "#0c8f7a";
+export function drawRoute(segments = [], startName = "Salida", endName = "Llegada", heading = 0, coords = segments, mode = "wind") {
+  if (!mapaRuta) {
+    mapaRuta = makeMap(dom.routeMapEl, 6);
+    if (!mapaRuta) return;
+    capaRuta = L.layerGroup().addTo(mapaRuta);
+    new ResizeObserver(() => mapaRuta.invalidateSize()).observe(dom.routeMapEl);
   }
-  if (modo === "temp") {
-    if (tramo.temperature <= 6) return "#2563eb";
-    if (tramo.temperature >= 32) return "#d84f3f";
-    if (tramo.temperature >= 24) return "#f0b429";
-    return "#0c8f7a";
-  }
-  if (tramo.gust >= 45) return "#d84f3f";
-  if (tramo.gust >= 28) return "#f0b429";
-  return "#0c8f7a";
-}
-
-// HTML del marcador con el icono adecuado a la métrica seleccionada.
-function htmlIconoMetrica(tramo, riesgo, modo) {
-  const escala =
-    modo === "rain"
-      ? 0.82 + limitar(tramo.rainChance, 0, 100) / 190
-      : modo === "temp"
-        ? 0.9 + limitar(Math.abs(tramo.temperature - 18), 0, 22) / 80
-        : 0.82 + limitar(tramo.gust, 0, 60) / 95;
-  const color = colorMetrica(tramo, modo);
-  if (modo === "rain") {
-    const relleno = limitar(tramo.rainChance, 8, 100);
-    return `<div class="route-marker metric-marker ${riesgo}" style="--marker-scale:${escala};--marker-bg:${color};--rain-fill:${relleno}%"><span class="rain-icon"></span></div>`;
-  }
-  if (modo === "temp") {
-    const relleno = limitar(((tramo.temperature + 5) / 45) * 100, 8, 100);
-    return `<div class="route-marker metric-marker ${riesgo}" style="--marker-scale:${escala};--marker-bg:${color};--temp-fill:${relleno}%"><span class="temp-icon"></span></div>`;
-  }
-  return `<div class="route-marker metric-marker ${riesgo}" style="--marker-scale:${escala};--marker-bg:${color}"><span class="wind-icon" style="transform: rotate(${tramo.windDirection}deg)"></span></div>`;
-}
-
-function iconoMetrica(tramo, riesgo, modo) {
-  return L.divIcon({
-    className: "",
-    html: htmlIconoMetrica(tramo, riesgo, modo),
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14],
-  });
-}
-
-// Texto del tooltip que aparece al pasar por encima de un marcador.
-function tooltipTramo(tramo, titulo) {
-  const emoji = weatherEmoji(tramo.code);
-  const brujula = windCompass(tramo.windDirection);
-  const noche = isNighttime(tramo.arrival) ? "🌙 " : "";
-  return `
-    <strong>${emoji} ${Math.round(tramo.km)} km — ${titulo}</strong><br>
-    ${noche}${tramo.arrival.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}<br>
-    🌡️ ${Math.round(tramo.temperature)}°C &nbsp; 💨 ${Math.round(tramo.wind)} km/h ${brujula}<br>
-    🌧️ ${tramo.rainChance}%
-  `;
-}
-
-// Pinta la ruta en el mapa principal: línea coloreada por riesgo y marcadores en cada tramo.
-export function drawRoute(
-  tramos = [],
-  nombreSalida = "Salida",
-  nombreLlegada = "Llegada",
-  rumboRuta = 0,
-  coordenadasRuta = tramos,
-  modo = "wind",
-) {
-  if (!initMapaRuta()) return;
   capaRuta.clearLayers();
-  if (!tramos.length) {
-    if (coordenadasRuta.length > 1) {
-      const previewLatLngs = coordenadasRuta.map((p) => [p.lat, p.lon]);
-      L.polyline(previewLatLngs, { color: "#172026", opacity: 0.7, weight: 7 }).addTo(capaRuta);
-      mapaRuta.fitBounds(L.latLngBounds(previewLatLngs), { padding: [36, 36], maxZoom: 12 });
-      return;
-    }
-    mapaRuta.setView([40.4168, -3.7038], 7);
+  if (coords.length < 2) {
+    lastCoords = null; routeBounds = null; pendingFit = false;
     return;
   }
-  const latLngsRuta = coordenadasRuta.map((p) => [p.lat, p.lon]);
-  const latLngsTramos = tramos.map((t) => [t.lat, t.lon]);
-  // Línea de fondo gris oscuro para dar profundidad.
-  L.polyline(latLngsRuta, { color: "#172026", opacity: 0.25, weight: 13 }).addTo(capaRuta);
-  // Cada subtramo se pinta del color correspondiente a su riesgo.
-  for (let i = 1; i < tramos.length; i += 1) {
-    const riesgo = riskFor(tramos[i], rumboRuta);
-    L.polyline(routeSlice(coordenadasRuta, tramos[i - 1].progress, tramos[i].progress), {
-      color: colorRiesgo(riesgo),
-      opacity: 0.94,
-      weight: 7,
+  const latLngs = coords.map((point) => [point.lat, point.lon]);
+  routeBounds = L.latLngBounds(latLngs);
+  if (lastCoords !== coords) pendingFit = true;
+  lastCoords = coords;
+  L.polyline(latLngs, { color: "#243a32", opacity: .25, weight: 10 }).addTo(capaRuta);
+  if (!segments.length) {
+    L.polyline(latLngs, { color: "#087e6e", weight: 5 }).addTo(capaRuta);
+  }
+  for (let index = 1; index < segments.length; index += 1) {
+    L.polyline(routeSlice(coords, segments[index - 1].progress, segments[index].progress), {
+      color: riskColor(riskFor(segments[index], heading)), weight: 5, opacity: .95,
     }).addTo(capaRuta);
   }
-  tramos.forEach((tramo) => {
-    const riesgo = riskFor(tramo, rumboRuta);
-    const [titulo] = weatherLabels[tramo.code] || ["Variable"];
-    L.marker([tramo.lat, tramo.lon], { icon: iconoMetrica(tramo, riesgo, modo) })
-      .bindTooltip(tooltipTramo(tramo, titulo), { direction: "top", opacity: 0.96, sticky: true })
-      .bindPopup(tooltipTramo(tramo, titulo))
-      .addTo(capaRuta);
+  segments.forEach((segment, index) => {
+    const content = tooltip(segment, index, segments.length);
+    L.marker([segment.lat, segment.lon], {
+      icon: metricPin(segment, mode),
+      title: content.textContent,
+      alt: `Previsión en el kilómetro ${segment.km.toFixed(1)}`,
+    }).bindTooltip(content, { direction: "top", opacity: .98 })
+      .bindPopup(content.cloneNode(true)).addTo(capaRuta);
   });
-  L.marker(latLngsTramos[0], { icon: iconoMarcador("endpoint-marker", "Salida") })
-    .bindPopup(nombreSalida)
-    .addTo(capaRuta);
-  L.marker(latLngsTramos[latLngsTramos.length - 1], {
-    icon: iconoMarcador("endpoint-marker", "Meta"),
-  })
-    .bindPopup(nombreLlegada)
-    .addTo(capaRuta);
-  setTimeout(() => {
-    mapaRuta.invalidateSize();
-    mapaRuta.fitBounds(L.latLngBounds(latLngsRuta), { padding: [36, 36], maxZoom: 11 });
-  }, 0);
+  if (pendingFit) requestAnimationFrame(fitRoute);
 }
 
-// Aplica el tema (claro u oscuro) y guarda la preferencia.
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const button = document.querySelector("#themeToggle");
+  button.replaceChildren(icon(theme === "dark" ? "Sun" : "Moon"));
+  button.title = theme === "dark" ? "Activar tema claro" : "Activar tema oscuro";
+  button.setAttribute("aria-label", button.title);
+}
 export function toggleTheme() {
-  const esOscuro = document.documentElement.getAttribute("data-theme") === "dark";
-  const siguiente = esOscuro ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", siguiente);
-  localStorage.setItem("ridecast.theme", siguiente);
-  const boton = document.querySelector("#themeToggle");
-  if (boton) boton.textContent = siguiente === "dark" ? "☀️" : "🌙";
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(theme);
+  try { localStorage.setItem("ridecast.theme", theme); } catch { /* El tema también funciona sin almacenamiento. */ }
 }
-
 export function initTheme() {
-  const guardado = localStorage.getItem("ridecast.theme") || "light";
-  document.documentElement.setAttribute("data-theme", guardado);
-  const boton = document.querySelector("#themeToggle");
-  if (boton) boton.textContent = guardado === "dark" ? "☀️" : "🌙";
+  let theme = "light";
+  try { theme = localStorage.getItem("ridecast.theme") === "dark" ? "dark" : "light"; } catch {}
+  applyTheme(theme);
 }
 
-// Pinta las rutas guardadas en la pestaña "Rutas".
-export function renderSavedRoutes(rutas) {
-  dom.savedCount.textContent = `${rutas.length} ${rutas.length === 1 ? "ruta" : "rutas"}`;
-  dom.savedRoutes.textContent = "";
-  if (!rutas.length) {
-    const vacio = document.createElement("div");
-    vacio.className = "saved-empty";
-    vacio.textContent = "Sin rutas guardadas";
-    dom.savedRoutes.append(vacio);
+export function renderSavedRoutes(routes) {
+  dom.savedCount.textContent = `${routes.length} ${routes.length === 1 ? "ruta" : "rutas"}`;
+  document.querySelector("#navCount").textContent = String(routes.length);
+  const query = document.querySelector("#routeSearch").value.trim().toLocaleLowerCase("es");
+  const sort = document.querySelector("#routeSort").value;
+  const filtered = routes.filter((route) => route.name.toLocaleLowerCase("es").includes(query));
+  filtered.sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "es")
+    : sort === "distance" ? pathDistance(b.coords) - pathDistance(a.coords)
+    : (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
+  dom.savedRoutes.replaceChildren();
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "saved-empty";
+    empty.append(icon("FolderHeart"), routes.length ? "No hay rutas con ese nombre." : "Tu colección todavía está vacía.");
+    dom.savedRoutes.append(empty);
     return;
   }
-  rutas.forEach((ruta) => {
-    const fila = document.createElement("article");
-    fila.className = "saved-route";
+  filtered.forEach((route) => {
+    const row = document.createElement("article");
+    row.className = "saved-route";
     const info = document.createElement("div");
-    const titulo = document.createElement("strong");
+    const title = document.createElement("strong");
+    title.textContent = route.name;
     const meta = document.createElement("span");
-    titulo.textContent = ruta.name;
-    meta.textContent = `${Math.round(ruta.distance || pathDistance(ruta.coords))} km`;
-    info.append(titulo, meta);
-    const acciones = document.createElement("div");
-    acciones.className = "saved-actions";
-    const cargar = botonAccion("mini-button", "Cargar", "load", ruta.id);
-    const exportar = botonAccion("mini-button", "GPX", "export", ruta.id);
-    const borrar = botonAccion("mini-button danger-button", "Borrar", "delete", ruta.id);
-    acciones.append(cargar, exportar, borrar);
-    fila.append(info, acciones);
-    dom.savedRoutes.append(fila);
+    const date = new Date(route.createdAt);
+    meta.textContent = `${pathDistance(route.coords).toFixed(1)} km${Number.isFinite(date.getTime()) ? " · " + date.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : ""}`;
+    info.append(title, meta);
+    const actions = document.createElement("div");
+    actions.className = "saved-actions";
+    actions.append(actionButton("Abrir " + route.name, "load", route.id, "ArrowUpRight"),
+      actionButton("Exportar GPX", "export", route.id, "Download"),
+      actionButton("Borrar " + route.name, "delete", route.id, "Trash2"));
+    row.append(info, actions);
+    dom.savedRoutes.append(row);
   });
 }
 
-function botonAccion(clases, texto, accion, id) {
-  const boton = document.createElement("button");
-  boton.type = "button";
-  boton.className = clases;
-  boton.textContent = texto;
-  boton.dataset.action = accion;
-  boton.dataset.id = id;
-  return boton;
+function actionButton(label, action, id, glyph) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "mini-button" + (action === "delete" ? " danger-button" : "");
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.dataset.action = action;
+  button.dataset.id = id;
+  button.append(icon(glyph));
+  return button;
+}
+
+export function downloadGpx(name, coords) {
+  const url = URL.createObjectURL(new Blob([buildGpx(name, coords)], { type: "application/gpx+xml" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -1,238 +1,144 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RideCast</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <main class="app">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">RideCast</p>
-          <h1>Tiempo de ruta para ciclistas</h1>
-        </div>
-        <div class="topbar-right">
-          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Cambiar tema">🌙</button>
-        </div>
-      </header>
-
-      <nav class="app-menu" aria-label="Menu principal">
-        <button class="menu-button active" type="button" data-window="plan">
-          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
-          <span>Planificar</span>
-        </button>
-        <button class="menu-button" type="button" data-window="library">
-          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/><polyline points="16 15 19 18 22 15"/></svg>
-          <span>Rutas</span>
-        </button>
-        <button class="menu-button" type="button" data-window="forecast">
-          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 0 1 0 9Z"/></svg>
-          <span>Mapa y tiempo</span>
-        </button>
-      </nav>
-
-      <section class="window active" data-window-panel="plan">
-        <div class="workspace single-column">
-          <aside class="controls wide-panel" aria-label="Planificacion de ruta">
-            <form id="rideForm">
-              <section class="control-section" id="routeModeSection">
-                <div class="section-title">
-                  <span>Tipo de ruta</span>
-                  <small>Mixto, carretera o caminos</small>
-                </div>
-                <div class="toggle-group" role="group" aria-label="Tipo de ruta">
-                  <button class="chip active" type="button" data-route-mode="mixto">Mixto</button>
-                  <button class="chip" type="button" data-route-mode="carretera">Carretera</button>
-                  <button class="chip" type="button" data-route-mode="caminos">Caminos</button>
-                </div>
-              </section>
-
-              <section class="control-section" id="routeSection">
-                <div class="section-title">
-                  <span>Ruta</span>
-                  <small id="routeSource">Marca puntos en el mapa</small>
-                </div>
-
-                <div class="plan-map-wrap" id="planMapWrap">
-                  <div id="planMap" aria-label="Mapa para marcar puntos de la ruta"></div>
-                  <button type="button" class="map-fullscreen-btn" id="planFullscreenBtn" aria-label="Pantalla completa" title="Pantalla completa">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 9 4 4 9 4"/><polyline points="20 9 20 4 15 4"/><polyline points="4 15 4 20 9 20"/><polyline points="20 15 20 20 15 20"/></svg>
-                  </button>
-                  <div class="plan-map-hint" id="planHint">Toca el mapa para añadir puntos. El primero es la salida, el último la llegada.</div>
-                </div>
-
-                <div class="waypoint-toolbar">
-                  <span class="waypoint-count" id="waypointCount">0 puntos</span>
-                  <div class="waypoint-actions">
-                    <button class="mini-button" type="button" id="undoWaypoint">Deshacer</button>
-                    <button class="mini-button danger-button" type="button" id="clearWaypoints">Vaciar</button>
-                  </div>
-                </div>
-
-                <ol class="waypoint-list" id="waypointList"></ol>
-              </section>
-
-              <section class="control-section" id="weatherSection">
-                <div class="section-title">
-                  <span>Tiempo</span>
-                  <small>Salida y ritmo</small>
-                </div>
-
-                <div class="grid-2">
-                  <div class="field">
-                    <label for="departure">Hora</label>
-                    <input id="departure" name="departure" type="datetime-local" required />
-                  </div>
-
-                  <div class="field">
-                    <label for="speed">Km/h</label>
-                    <input id="speed" name="speed" type="number" min="8" max="45" step="1" value="23" required />
-                  </div>
-                </div>
-              </section>
-
-              <section class="control-section" id="settingsSection">
-                <div class="section-title">
-                  <span>Ajustes</span>
-                  <small>Precision</small>
-                </div>
-
-                <div class="field">
-                  <label for="samples">Tramos</label>
-                  <input id="samples" name="samples" type="range" min="4" max="12" value="8" />
-                  <div class="range-row">
-                    <span>4</span>
-                    <output id="samplesOut">8</output>
-                    <span>12</span>
-                  </div>
-                </div>
-              </section>
-
-              <button class="primary" type="submit">
-                <span class="button-icon">↻</span>
-                Calcular
-              </button>
-
-              <button class="secondary" type="button" id="exportPlanRoute">Exportar GPX</button>
-            </form>
-
-            <div class="metric-stack" id="summaryCards">
-              <article class="metric">
-                <span>Distancia</span>
-                <strong>--</strong>
-              </article>
-              <article class="metric">
-                <span>Duracion</span>
-                <strong>--</strong>
-              </article>
-              <article class="metric">
-                <span>Riesgo</span>
-                <strong>--</strong>
-              </article>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section class="window" data-window-panel="library">
-        <div class="workspace single-column">
-          <aside class="controls wide-panel" aria-label="Biblioteca de rutas">
-            <section class="control-section" id="importSection">
-              <div class="section-title">
-                <span>Importar</span>
-                <small>GPX o TCX</small>
-              </div>
-
-              <label class="file-drop" for="routeFile">
-                <span>Subir fichero GPX o TCX</span>
-                <input id="routeFile" type="file" accept=".gpx,.tcx,.xml" />
-              </label>
-
-              <div class="import-note" id="importStatus">Sin ruta importada</div>
-            </section>
-
-            <section class="control-section" id="savedSection">
-              <div class="section-title">
-                <span>Guardadas</span>
-                <small id="savedCount">0 rutas</small>
-              </div>
-
-              <div class="save-row">
-                <input id="saveName" type="text" placeholder="Nombre de ruta" autocomplete="off" />
-                <button class="secondary icon-action" type="button" id="saveRoute">Guardar</button>
-                <button class="secondary icon-action" type="button" id="exportRoute">Exportar GPX</button>
-              </div>
-
-              <div class="saved-list" id="savedRoutes"></div>
-            </section>
-          </aside>
-        </div>
-      </section>
-
-      <section class="window" data-window-panel="forecast">
-        <section class="ride-board" id="mapSection" aria-label="Panel de ruta">
-          <div class="map-panel">
-            <div id="routeMap" aria-label="Mapa geografico de la ruta"></div>
-            <div class="map-legend" id="mapLegend">
-              <span><i class="dot good"></i>Bueno</span>
-              <span><i class="dot watch"></i>Vigilar</span>
-              <span><i class="dot bad"></i>Duro</span>
-            </div>
-          </div>
-
-          <div class="timeline-head">
-            <h2>Tramos</h2>
-            <div class="timeline-controls">
-<div class="toggle-group" role="group" aria-label="Metrica principal">
-                <button class="chip active" type="button" data-mode="wind">Viento</button>
-                <button class="chip" type="button" data-mode="rain">Lluvia</button>
-                <button class="chip" type="button" data-mode="temp">Temp</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="timeline" id="timeline"></div>
-        </section>
-      </section>
-    </main>
-
-    <template id="segmentTemplate">
-      <article class="segment-card">
-        <div class="segment-top">
-          <div>
-            <p class="segment-km"></p>
-            <h3 class="segment-name"></h3>
-          </div>
-          <div class="weather-icon"></div>
-        </div>
-        <div class="segment-meta"></div>
-        <div class="bar-track"><span class="bar-fill"></span></div>
-        <dl class="weather-grid">
-          <div><dt>Temp</dt><dd class="temp"></dd></div>
-          <div><dt>Viento</dt><dd class="wind"></dd></div>
-          <div><dt>Racha</dt><dd class="gust"></dd></div>
-          <div><dt>Lluvia</dt><dd class="rain"></dd></div>
-        </dl>
-      </article>
-    </template>
-
-    <div class="modal-backdrop" id="importModal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
-        <h3 id="importModalTitle">Hora de salida</h3>
-        <p class="modal-sub">Indica cuándo quieres iniciar la ruta importada.</p>
-        <label for="importDeparture">Fecha y hora</label>
-        <input id="importDeparture" type="datetime-local" />
-        <div class="modal-actions">
-          <button type="button" class="secondary" id="importCancel">Cancelar</button>
-          <button type="button" class="primary" id="importConfirm">Aceptar</button>
-        </div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#087e6e">
+  <meta name="description" content="Planifica tus rutas en bicicleta y consulta el viento, la lluvia y la temperatura a lo largo del recorrido.">
+  <title>RideCast | Rutas y tiempo</title>
+  <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="./workspace.css">
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">Ir al contenido</a>
+  <aside class="sidebar">
+    <a class="brand" href="#plan"><span class="brand-icon"><i data-lucide="route"></i></span><span>RideCast<small>Rutas y tiempo</small></span></a>
+    <div class="nav-label">TU ESPACIO</div>
+    <nav class="app-menu" aria-label="Menú principal">
+      <button type="button" class="menu-button active" data-window="plan" aria-current="page"><i data-lucide="map"></i><span>Planificar</span></button>
+      <button type="button" class="menu-button" data-window="library"><i data-lucide="folder-heart"></i><span>Mis rutas</span><span id="navCount" class="count">0</span></button>
+      <button type="button" class="menu-button" data-window="forecast"><i data-lucide="cloud-sun"></i><span>Previsión</span></button>
+    </nav>
+    <div class="sidebar-bottom"><i data-lucide="bike"></i><span>Cada salida cuenta.</span></div>
+  </aside>
+  <main class="app" id="mainContent">
+    <header class="topbar">
+      <div><p class="eyebrow">RIDECAST / <span id="pageEyebrow">PLANIFICADOR</span></p><h1 id="pageTitle">Tu próxima salida</h1></div>
+      <div class="topbar-right">
+        <button type="button" id="newRoute" class="secondary-button compact"><i data-lucide="plus"></i><span>Nueva ruta</span></button>
+        <button type="button" id="themeToggle" class="icon-button" title="Cambiar tema" aria-label="Cambiar tema"><i data-lucide="moon"></i></button>
       </div>
-    </div>
+    </header>
+    <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module" src="./app.js"></script>
-  </body>
+    <section class="window active" data-window-panel="plan" aria-label="Planificador">
+      <div class="planner-layout">
+        <section class="planner-map-section">
+          <div class="section-heading"><h2>Recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
+          <div id="planMapWrap" class="plan-map-wrap">
+            <div id="planMap" class="plan-map"></div>
+            <button type="button" id="planFullscreenBtn" class="icon-button map-fullscreen-btn" title="Pantalla completa" aria-label="Pantalla completa"><i data-lucide="maximize"></i></button>
+          </div>
+          <div class="waypoint-toolbar"><span id="waypointCount">0 puntos</span><div class="inline-actions">
+            <button type="button" id="undoWaypoint" class="icon-button" title="Deshacer último punto" aria-label="Deshacer último punto"><i data-lucide="undo-2"></i></button>
+            <button type="button" id="clearWaypoints" class="icon-button" title="Borrar recorrido" aria-label="Borrar recorrido"><i data-lucide="trash-2"></i></button>
+          </div></div>
+          <ol id="waypointList" class="waypoint-list"></ol>
+          <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM</p>
+        </section>
+        <aside class="ride-settings">
+          <form id="rideForm">
+            <div class="section-heading"><h2>Salida</h2><i data-lucide="sliders-horizontal"></i></div>
+            <section class="form-section">
+              <label for="departure">Fecha y hora</label>
+              <input id="departure" name="departure" type="datetime-local" required>
+              <label for="speed">Velocidad media</label>
+              <div class="unit-input"><input id="speed" name="speed" type="number" min="8" max="45" step="1" value="23" required><span>km/h</span></div>
+            </section>
+            <section class="form-section">
+              <div class="label-row"><label for="samples">Puntos de previsión</label><output id="samplesOut" for="samples">8</output></div>
+              <input id="samples" name="samples" type="range" min="4" max="12" value="8">
+              <div class="range-row"><span>4</span><span>12</span></div>
+            </section>
+            <div class="plan-actions">
+              <button type="submit" class="primary-button"><i data-lucide="cloud-sun"></i><span>Calcular previsión</span></button>
+              <button type="button" id="exportPlanRoute" class="secondary-button"><i data-lucide="download"></i><span>Exportar GPX</span></button>
+            </div>
+          </form>
+          <a href="#library" class="import-link"><i data-lucide="upload"></i>Importar una ruta<i data-lucide="arrow-right"></i></a>
+          <p class="muted source-note">Previsión de Open-Meteo. Las condiciones reales pueden variar.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="window" data-window-panel="library" aria-label="Mis rutas" hidden>
+      <div class="library-layout">
+        <aside class="library-tools">
+          <section id="importSection">
+            <div class="section-heading"><h2>Importar recorrido</h2><i data-lucide="upload"></i></div>
+            <label class="file-drop" for="routeFile"><i data-lucide="file-up"></i><strong>Seleccionar fichero</strong><span>GPX o TCX · Hasta 10 MB</span><input id="routeFile" type="file" accept=".gpx,.tcx,.xml"></label>
+            <p id="importStatus" class="muted" role="status"></p>
+          </section>
+          <section class="save-section">
+            <h2>Guardar ruta actual</h2>
+            <label for="saveName">Nombre de la ruta</label>
+            <input id="saveName" type="text" maxlength="100" placeholder="Salida del domingo">
+            <div class="save-actions"><button type="button" id="saveRoute" class="primary-button"><i data-lucide="bookmark-plus"></i>Guardar</button><button type="button" id="exportRoute" class="icon-button" title="Exportar ruta actual" aria-label="Exportar ruta actual"><i data-lucide="download"></i></button></div>
+            <p class="muted source-note">Guardadas en este navegador. Exporta tus rutas para llevarlas a otro dispositivo.</p>
+          </section>
+          <section class="provider-section"><h2>Strava y Wikiloc</h2><p class="muted">Importación mediante archivos GPX. Conexión directa no configurada.</p><div class="provider-links"><a href="https://www.strava.com/athlete/routes" target="_blank" rel="noopener noreferrer">Strava<i data-lucide="external-link"></i></a><a href="https://www.wikiloc.com/" target="_blank" rel="noopener noreferrer">Wikiloc<i data-lucide="external-link"></i></a></div></section>
+        </aside>
+        <section id="savedSection" class="library-list">
+          <div class="section-heading"><h2>Tu colección</h2><span id="savedCount" class="source-label">0 rutas</span></div>
+          <div class="library-toolbar">
+            <div class="search-field"><i data-lucide="search"></i><input id="routeSearch" type="search" aria-label="Buscar rutas guardadas" placeholder="Buscar por nombre"></div>
+            <select id="routeSort" aria-label="Ordenar rutas"><option value="recent">Más recientes</option><option value="name">Nombre A–Z</option><option value="distance">Mayor distancia</option></select>
+          </div>
+          <div id="savedRoutes" class="saved-routes"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="window" data-window-panel="forecast" aria-label="Previsión" hidden>
+      <div id="summaryCards" class="summary-cards">
+        <article class="metric"><span>Distancia</span><strong>—</strong></article>
+        <article class="metric"><span>Duración estimada</span><strong>—</strong></article>
+        <article class="metric"><span>Temperatura</span><strong>—</strong></article>
+        <article class="metric"><span>Condiciones</span><strong>—</strong></article>
+      </div>
+      <section class="ride-board" id="mapSection">
+        <div class="forecast-toolbar">
+          <div><h2 id="forecastTitle">Tiempo en ruta</h2><p id="forecastDate" class="muted">Sin previsión calculada</p></div>
+          <div class="forecast-actions">
+            <div class="segmented" role="group" aria-label="Variable meteorológica">
+              <button type="button" class="chip active" data-mode="wind" aria-pressed="true"><i data-lucide="wind"></i><span>Viento</span></button>
+              <button type="button" class="chip" data-mode="rain" aria-pressed="false"><i data-lucide="cloud-rain"></i><span>Lluvia</span></button>
+              <button type="button" class="chip" data-mode="temp" aria-pressed="false"><i data-lucide="thermometer"></i><span>Temperatura</span></button>
+            </div>
+            <button type="button" id="fitRoute" class="icon-button" title="Ajustar mapa a la ruta" aria-label="Ajustar mapa a la ruta"><i data-lucide="scan"></i></button>
+            <button type="button" id="saveForecast" class="icon-button" title="Guardar esta ruta" aria-label="Guardar esta ruta"><i data-lucide="bookmark-plus"></i></button>
+          </div>
+        </div>
+        <div class="map-panel"><div id="routeMap" class="route-map"></div></div>
+        <div id="mapLegend" class="map-legend"><span><i class="dot good"></i>Favorables</span><span><i class="dot watch"></i>Atención</span><span><i class="dot bad"></i>Exigentes</span><span class="legend-caption">Condiciones del recorrido</span></div>
+        <div class="section-heading timeline-head"><h2>Previsión por tramo</h2><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" class="data-source">Open-Meteo<i data-lucide="external-link"></i></a></div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+    </section>
+  </main>
+  <template id="segmentTemplate">
+    <article class="segment-card">
+      <div class="segment-top"><span class="segment-km"></span><span class="weather-icon"></span></div>
+      <h3 class="segment-name"></h3><p class="segment-meta"></p>
+      <div class="bar"><div class="bar-fill"></div></div>
+      <dl class="segment-values"><div><dt>Temperatura</dt><dd class="temp"></dd></div><div><dt>Viento</dt><dd class="wind"></dd></div><div><dt>Rachas</dt><dd class="gust"></dd></div><div><dt>Lluvia</dt><dd class="rain"></dd></div></dl>
+    </article>
+  </template>
+  <dialog id="importModal" class="import-dialog">
+    <form method="dialog" id="importForm"><div class="section-heading"><h2>¿Cuándo sales?</h2><button value="cancel" class="icon-button" title="Cancelar importación" aria-label="Cancelar importación" formnovalidate><i data-lucide="x"></i></button></div><label for="importDeparture">Fecha y hora de salida</label><input id="importDeparture" type="datetime-local" required><div class="dialog-actions"><button id="importCancel" value="cancel" class="secondary-button" formnovalidate>Cancelar</button><button id="importConfirm" value="confirm" class="primary-button">Importar ruta</button></div></form>
+  </dialog>
+  <script src="./vendor/leaflet/leaflet.js"></script>
+  <script src="./vendor/lucide.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
 </html>
