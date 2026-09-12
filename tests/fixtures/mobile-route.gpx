@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RideCast test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Prueba móvil - Retiro</name><trkseg>
+    <trkpt lat="40.4190" lon="-3.6880"/>
+    <trkpt lat="40.4200" lon="-3.6850"/>
+    <trkpt lat="40.4200" lon="-3.6810"/>
+    <trkpt lat="40.4165" lon="-3.6790"/>
+    <trkpt lat="40.4120" lon="-3.6810"/>
+    <trkpt lat="40.4125" lon="-3.6850"/>
+    <trkpt lat="40.4160" lon="-3.6880"/>
+    <trkpt lat="40.4190" lon="-3.6880"/>
+  </trkseg></trk>
+</gpx>

@@ -79,8 +79,9 @@ export function bearing(a, b) {
 
 const BIKE_SERVICE = "https://routing.openstreetmap.de/routed-bike";
 
-async function fetchJson(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(25000) });
+async function fetchJson(url, signal) {
+  const timeout = AbortSignal.timeout(25000);
+  const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!response.ok) throw new Error("El servicio no está disponible. Inténtalo de nuevo.");
   return response.json();
 }
@@ -98,14 +99,15 @@ export async function snapToRoad(lat, lon) {
   }
 }
 
-export async function routeAcross(points) {
+export async function routeAcross(points, { signal, radiuses } = {}) {
   if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa.");
   if (points.length > 25) throw new Error("El máximo es de 25 puntos por recorrido.");
   if (!points.every(validCoordinate)) throw new Error("Las coordenadas de la ruta no son válidas.");
   try {
     const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
     const params = new URLSearchParams({ alternatives: "false", steps: "false", overview: "full", geometries: "geojson" });
-    const data = await fetchJson(`${BIKE_SERVICE}/route/v1/cycling/${coords}?${params}`);
+    if (radiuses) params.set("radiuses", radiuses.join(";"));
+    const data = await fetchJson(`${BIKE_SERVICE}/route/v1/cycling/${coords}?${params}`, signal);
     const route = data.routes?.[0];
     if (data.code !== "Ok" || !route?.geometry?.coordinates?.length || !(route.distance > 0)) {
       throw new Error("Sin recorrido");
@@ -114,8 +116,108 @@ export async function routeAcross(points) {
     if (!geometry.every(validCoordinate)) throw new Error("Coordenadas no válidas");
     return { coords: geometry, distance: route.distance / 1000, routed: true };
   } catch {
+    signal?.throwIfAborted();
     throw new Error("No se pudo trazar una ruta ciclista. Prueba con puntos más cercanos o importa un GPX.");
   }
+}
+
+function destination(origin, km, heading) {
+  const rad = Math.PI / 180;
+  const lat = origin.lat * rad, lon = origin.lon * rad, angle = heading * rad, distance = km / 6371;
+  const nextLat = Math.asin(Math.sin(lat) * Math.cos(distance) + Math.cos(lat) * Math.sin(distance) * Math.cos(angle));
+  const nextLon = lon + Math.atan2(Math.sin(angle) * Math.sin(distance) * Math.cos(lat), Math.cos(distance) - Math.sin(lat) * Math.sin(nextLat));
+  return { lat: nextLat / rad, lon: ((nextLon / rad + 540) % 360) - 180 };
+}
+
+export function surfaceBreakdown(messages) {
+  const totals = { paved: 0, unpaved: 0, unknown: 0 };
+  if (!Array.isArray(messages) || !Array.isArray(messages[0])) return null;
+  const distanceIndex = messages[0].indexOf("Distance"), tagsIndex = messages[0].indexOf("WayTags");
+  if (distanceIndex < 0 || tagsIndex < 0) return null;
+  for (const row of messages.slice(1)) {
+    if (!Array.isArray(row)) continue;
+    const distance = Number(row[distanceIndex]);
+    if (!Number.isFinite(distance) || distance <= 0) continue;
+    const tags = Object.fromEntries(String(row[tagsIndex] || "").split(/\s+/).filter(tag => tag.includes("=")).map(tag => tag.split("=")));
+    const surface = tags.surface;
+    const paved = ["asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes", "paving_stones", "sett", "cobblestone"].includes(surface);
+    const unpaved = ["unpaved", "ground", "dirt", "earth", "gravel", "fine_gravel", "compacted", "grass", "sand", "mud", "clay", "pebblestone"].includes(surface);
+    totals[paved ? "paved" : unpaved ? "unpaved" : "unknown"] += distance;
+  }
+  const total = totals.paved + totals.unpaved + totals.unknown;
+  return total ? Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, value / total])) : null;
+}
+
+export async function routeForSurface(points, surface, { signal } = {}) {
+  if (!["asphalt", "dirt"].includes(surface)) throw new Error("Selecciona asfalto o caminos de tierra.");
+  const params = new URLSearchParams({
+    lonlats: points.map(p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join("|"),
+    nogos: "", profile: surface === "asphalt" ? "fastbike" : "mtb", alternativeidx: "0", format: "geojson",
+    "profile:allow_steps": "0", "profile:allow_ferries": "0",
+    "profile:correctMisplacedViaPoints": "1", "profile:correctMisplacedViaPointsDistance": "400",
+  });
+  if (surface === "dirt") params.set("profile:StrictNOBicycleaccess", "1");
+  const data = await fetchJson(`https://brouter.de/brouter?${params}`, signal);
+  const feature = data.features?.find(item => item.geometry?.type === "LineString");
+  const coords = feature?.geometry.coordinates?.map(([lon, lat]) => ({ lat, lon }));
+  const distance = Number(feature?.properties?.["track-length"]) / 1000;
+  if (!coords || coords.length < 3 || !coords.every(validCoordinate) || !Number.isFinite(distance) || distance <= 0) {
+    throw new Error("El servicio no ha devuelto un recorrido válido para ese firme.");
+  }
+  return { coords, distance, routed: true, surface, surfaces: surfaceBreakdown(feature.properties.messages) };
+}
+
+export function repeatedRouteRatio(coords) {
+  const seen = new Set();
+  let total = 0, repeated = 0;
+  const key = p => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+  for (let i = 1; i < coords.length; i++) {
+    const a = key(coords[i - 1]), b = key(coords[i]);
+    if (a === b) continue;
+    const edge = a < b ? `${a}|${b}` : `${b}|${a}`;
+    const length = haversine(coords[i - 1], coords[i]);
+    total += length;
+    if (seen.has(edge)) repeated += length;
+    seen.add(edge);
+  }
+  return total ? repeated / total : 1;
+}
+
+export async function generateRoundTrip(start, targetKm, heading, { surface = "asphalt", signal, onProgress = () => {} } = {}) {
+  if (!validCoordinate(start)) throw new Error("Elige primero un punto de salida en el mapa o utiliza tu ubicación.");
+  if (!Number.isFinite(targetKm) || targetKm < 5 || targetKm > 150) throw new Error("Elige una distancia entre 5 y 150 km.");
+  if (!Number.isFinite(heading)) throw new Error("Selecciona una orientación válida.");
+  if (!["asphalt", "dirt"].includes(surface)) throw new Error("Selecciona asfalto o caminos de tierra.");
+  let radius = targetKm / 6, best = null, received = false;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    signal?.throwIfAborted();
+    if (attempt) await new Promise(resolve => setTimeout(resolve, 1100));
+    signal?.throwIfAborted();
+    onProgress(attempt + 1, 6);
+    // Refinar dos veces cada orientación antes de explorar otro trazado.
+    const direction = heading + [0, 0, 35, 35, -35, -35][attempt];
+    const points = [start, destination(start, radius, direction - 45),
+      destination(start, radius * 1.7, direction), destination(start, radius, direction + 45), start];
+    try {
+      const route = await routeForSurface(points, surface, { signal });
+      received = true;
+      const closed = haversine(route.coords[0], route.coords.at(-1)) < 0.05;
+      const nearStart = haversine(start, route.coords[0]) <= 0.25;
+      const error = Math.abs(route.distance - targetKm) / targetKm;
+      const repeated = repeatedRouteRatio(route.coords);
+      const score = error + repeated * 0.25;
+      if (closed && nearStart && error <= 0.05 && repeated <= 0.2 && (!best || score < best.score)) best = { ...route, error, repeated, score };
+      if (best?.error <= 0.02 && best.repeated <= 0.08) break;
+      radius *= Math.max(0.6, Math.min(1.5, targetKm / route.distance));
+    } catch {
+      signal?.throwIfAborted();
+    }
+  }
+  if (!best) throw new Error(received
+    ? "No se encontró un circuito dentro del 5 % de la distancia y con pocos tramos repetidos. Prueba otra orientación o distancia. Tu ruta anterior se conserva."
+    : "El servicio de rutas por firme no ha podido responder. Inténtalo de nuevo. Tu ruta anterior se conserva.");
+  return { coords: best.coords, distance: best.distance, routed: true,
+    generation: { surface, surfaces: best.surfaces, targetKm, error: best.error, repeated: best.repeated } };
 }
 
 export function validCoordinate(point) {

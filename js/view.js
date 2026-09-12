@@ -24,11 +24,15 @@ export function initIcons() {
   window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
 }
 
+let statusTimer;
 export function showStatus(message, type = "info") {
+  clearTimeout(statusTimer);
   const status = document.querySelector("#appStatus");
   status.hidden = !message;
   status.dataset.type = type;
-  status.textContent = message;
+  document.querySelector("#statusMessage").textContent = message;
+  document.querySelector("#statusSymbol").replaceChildren(icon(type === "error" ? "CircleAlert" : "CircleCheck"));
+  if (message && type !== "error") statusTimer = setTimeout(() => { status.hidden = true; }, 6000);
 }
 
 let mapaRuta, capaRuta, mapaPlan, capaMarcadoresPlan, capaLineaPlan;
@@ -58,6 +62,10 @@ export function initPlanMap(onClick) {
 
 export function refreshPlanMap() {
   requestAnimationFrame(() => mapaPlan?.invalidateSize());
+}
+
+export function centerPlanLocation(point) {
+  mapaPlan?.setView([point.lat, point.lon], 15);
 }
 
 export function togglePlanFullscreen() {
@@ -97,8 +105,19 @@ export function renderWaypoints(points) {
     }
   });
   if (points.length > 1 && capaLineaPlan) {
-    L.polyline(points.map((p) => [p.lat, p.lon]), { color: "#087e6e", weight: 3, opacity: .5, dashArray: "4 6" }).addTo(capaLineaPlan);
+    L.polyline(points.map((p) => [p.lat, p.lon]), { color: "#2463dc", weight: 3, opacity: .5, dashArray: "4 6" }).addTo(capaLineaPlan);
   }
+}
+
+export function renderImportedWaypoints(coords) {
+  renderWaypoints([]);
+  dom.waypointCount.textContent = `${coords.length.toLocaleString("es-ES")} puntos de ruta`;
+  [coords[0], coords.at(-1)].forEach((point, index) => {
+    const item = document.createElement("li");
+    item.className = "waypoint-item";
+    item.textContent = `${index ? "Llegada" : "Salida"} · ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}`;
+    dom.waypointList.append(item);
+  });
 }
 
 export function setPlanRoutePreview(coords, fit = false) {
@@ -106,7 +125,7 @@ export function setPlanRoutePreview(coords, fit = false) {
   capaLineaPlan.clearLayers();
   if (!coords?.length) return;
   const latLngs = coords.map((p) => [p.lat, p.lon]);
-  L.polyline(latLngs, { color: "#087e6e", weight: 4 }).addTo(capaLineaPlan);
+  L.polyline(latLngs, { color: "#2463dc", weight: 4 }).addTo(capaLineaPlan);
   if (fit) requestAnimationFrame(() => {
     mapaPlan.invalidateSize();
     mapaPlan.fitBounds(L.latLngBounds(latLngs), { padding: [35,35], maxZoom: 14 });
@@ -117,9 +136,11 @@ export function updateSamplesRange() {
   dom.samplesOut.value = dom.samples.value;
 }
 
-const pages = { plan: ["Tu próxima salida", "PLANIFICADOR"], library: ["Mis rutas", "COLECCIÓN"], forecast: ["Previsión de la ruta", "TIEMPO"] };
+const pages = { plan: ["Planifica tu salida", "PLANIFICADOR"], library: ["Tus rutas, a mano", "COLECCIÓN"], forecast: ["Previsión de tu ruta", "PREVISIÓN"] };
 export function setWindow(name) {
   if (!pages[name]) name = "plan";
+  const changed = document.body.dataset.activeWindow !== name;
+  document.body.dataset.activeWindow = name;
   dom.menuButtons.forEach((button) => {
     const active = button.dataset.window === name;
     button.classList.toggle("active", active);
@@ -134,6 +155,7 @@ export function setWindow(name) {
   document.querySelector("#pageTitle").textContent = pages[name][0];
   document.querySelector("#pageEyebrow").textContent = pages[name][1];
   document.title = `RideCast | ${pages[name][0]}`;
+  if (changed) document.documentElement.scrollTop = 0;
   if (location.hash !== "#" + name) location.hash = name;
   if (name === "plan") refreshPlanMap();
   if (name === "forecast") requestAnimationFrame(() => {
@@ -169,6 +191,10 @@ export function renderTimeline(segments, heading, mode) {
     card.querySelector(".segment-km").textContent = `${segment.km.toFixed(1)} km`;
     card.querySelector(".segment-name").textContent = weatherLabels[segment.code]?.[0] || "Variable";
     card.querySelector(".weather-icon").replaceChildren(icon(weatherIcon(segment.code)));
+    card.querySelectorAll("i[data-lucide]").forEach((element) => {
+      const name = element.dataset.lucide.replace(/(^|-)([a-z])/g, (_, dash, letter) => letter.toUpperCase());
+      element.replaceWith(icon(name));
+    });
     card.querySelector(".segment-meta").textContent = segment.arrival.toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" });
     card.querySelector(".temp").textContent = `${Math.round(segment.temperature)} °C`;
     card.querySelector(".wind").textContent = `${Math.round(segment.wind)} km/h ${windCompass(segment.windDirection)}`;
@@ -190,11 +216,13 @@ export function renderSummary(distance = 0, hours = 0, segments = [], heading = 
     ["Temperatura", temps.length ? `${Math.round(Math.min(...temps))} a ${Math.round(Math.max(...temps))} °C` : "—"],
     ["Condiciones", segments.length ? conditions : "—"],
   ];
-  dom.summaryCards.replaceChildren(...values.map(([label, value]) => {
+  const glyphs = ["Route", "Timer", "Thermometer", "CloudSun"];
+  dom.summaryCards.replaceChildren(...values.map(([label, value], index) => {
     const article = document.createElement("article");
     article.className = "metric";
     const title = document.createElement("span");
-    title.textContent = label;
+    title.className = "metric-label";
+    title.append(icon(glyphs[index]), label);
     const strong = document.createElement("strong");
     strong.textContent = value;
     article.append(title, strong);
@@ -224,7 +252,7 @@ function metricPin(segment, mode) {
   const glyph = icon(name);
   if (mode === "wind" && segment.wind >= 2) glyph.style.transform = `rotate(${(segment.windDirection + 180) % 360}deg)`;
   pin.append(glyph);
-  return L.divIcon({ className: "", html: pin, iconSize: [34,34], iconAnchor: [17,17], popupAnchor: [0,-18], tooltipAnchor: [0,-18] });
+  return L.divIcon({ className: "", html: pin, iconSize: [44,44], iconAnchor: [22,22], popupAnchor: [0,-22], tooltipAnchor: [0,-22] });
 }
 
 function tooltip(segment, index, count) {
@@ -267,7 +295,7 @@ export function drawRoute(segments = [], startName = "Salida", endName = "Llegad
   lastCoords = coords;
   L.polyline(latLngs, { color: "#243a32", opacity: .25, weight: 10 }).addTo(capaRuta);
   if (!segments.length) {
-    L.polyline(latLngs, { color: "#087e6e", weight: 5 }).addTo(capaRuta);
+    L.polyline(latLngs, { color: "#2463dc", weight: 5 }).addTo(capaRuta);
   }
   for (let index = 1; index < segments.length; index += 1) {
     L.polyline(routeSlice(coords, segments[index - 1].progress, segments[index].progress), {
@@ -276,12 +304,13 @@ export function drawRoute(segments = [], startName = "Salida", endName = "Llegad
   }
   segments.forEach((segment, index) => {
     const content = tooltip(segment, index, segments.length);
-    L.marker([segment.lat, segment.lon], {
+    const marker = L.marker([segment.lat, segment.lon], {
       icon: metricPin(segment, mode),
-      title: content.textContent,
+      title: `Previsión en el kilómetro ${segment.km.toFixed(1)}`,
       alt: `Previsión en el kilómetro ${segment.km.toFixed(1)}`,
     }).bindTooltip(content, { direction: "top", opacity: .98 })
       .bindPopup(content.cloneNode(true)).addTo(capaRuta);
+    marker.on("popupopen", () => marker.closeTooltip());
   });
   if (pendingFit) requestAnimationFrame(fitRoute);
 }
@@ -317,7 +346,16 @@ export function renderSavedRoutes(routes) {
   if (!filtered.length) {
     const empty = document.createElement("div");
     empty.className = "saved-empty";
-    empty.append(icon("FolderHeart"), routes.length ? "No hay rutas con ese nombre." : "Tu colección todavía está vacía.");
+    const title = document.createElement("strong");
+    title.textContent = routes.length ? "Sin coincidencias" : "Tu próxima aventura empieza aquí";
+    empty.append(icon(routes.length ? "SearchX" : "Route"), title);
+    if (routes.length) empty.append("No hay rutas con ese nombre.");
+    else {
+      const link = document.createElement("a");
+      link.href = "#plan";
+      link.append("Crear una ruta", icon("ArrowRight"));
+      empty.append(link);
+    }
     dom.savedRoutes.append(empty);
     return;
   }
@@ -325,9 +363,11 @@ export function renderSavedRoutes(routes) {
     const row = document.createElement("article");
     row.className = "saved-route";
     const info = document.createElement("div");
+    info.className = "saved-route-info";
     const title = document.createElement("strong");
     title.textContent = route.name;
     const meta = document.createElement("span");
+    meta.className = "route-meta";
     const date = new Date(route.createdAt);
     meta.textContent = `${pathDistance(route.coords).toFixed(1)} km${Number.isFinite(date.getTime()) ? " · " + date.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : ""}`;
     info.append(title, meta);
@@ -335,10 +375,43 @@ export function renderSavedRoutes(routes) {
     actions.className = "saved-actions";
     actions.append(actionButton("Abrir " + route.name, "load", route.id, "ArrowUpRight"),
       actionButton("Exportar GPX", "export", route.id, "Download"),
+      actionButton("Garmin Connect", "garmin", route.id, "Send"),
       actionButton("Borrar " + route.name, "delete", route.id, "Trash2"));
-    row.append(info, actions);
+    row.append(routePreview(route.coords), info, actions);
     dom.savedRoutes.append(row);
   });
+}
+
+function routePreview(coords) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 86 86");
+  svg.classList.add("route-preview");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Trazado de la ruta");
+  const factor = Math.cos(coords[0].lat * Math.PI / 180);
+  const bounds = coords.reduce((b, p) => [Math.min(b[0], p.lon * factor), Math.max(b[1], p.lon * factor), Math.min(b[2], p.lat), Math.max(b[3], p.lat)], [Infinity, -Infinity, Infinity, -Infinity]);
+  const scale = 60 / Math.max(bounds[1] - bounds[0], bounds[3] - bounds[2], .000001);
+  const project = p => [43 + (p.lon * factor - (bounds[0] + bounds[1]) / 2) * scale, 43 - (p.lat - (bounds[2] + bounds[3]) / 2) * scale];
+  const step = Math.max(1, Math.ceil(coords.length / 240));
+  const points = coords.filter((_, i) => i % step === 0 || i === coords.length - 1);
+  const path = document.createElementNS(ns, "polyline");
+  path.setAttribute("points", points.map(p => project(p).map(v => v.toFixed(1)).join(",")).join(" "));
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2.5");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  [coords[0], coords.at(-1)].forEach((point, index) => {
+    const [x, y] = project(point);
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", "4");
+    dot.setAttribute("fill", index ? "var(--danger)" : "currentColor");
+    dot.setAttribute("stroke", "var(--paper)"); dot.setAttribute("stroke-width", "2");
+    svg.append(dot);
+  });
+  return svg;
 }
 
 function actionButton(label, action, id, glyph) {
@@ -354,12 +427,35 @@ function actionButton(label, action, id, glyph) {
 }
 
 export function downloadGpx(name, coords) {
-  const url = URL.createObjectURL(new Blob([buildGpx(name, coords)], { type: "application/gpx+xml" }));
+  downloadGpxFile(createGpxFile(name, coords));
+}
+
+export function createGpxFile(name, coords) {
+  return new File([buildGpx(name, coords)], `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`, { type: "application/gpx+xml" });
+}
+
+export function canShareGpx(file, platform = navigator) {
+  try { return typeof platform.share === "function" && !!platform.canShare?.({ files: [file] }); }
+  catch { return false; }
+}
+
+export async function shareGpx(file, platform = navigator) {
+  if (!canShareGpx(file, platform)) return "unsupported";
+  try {
+    await platform.share({ files: [file] });
+    return "shared";
+  } catch (error) {
+    return error.name === "AbortError" ? "cancelled" : "failed";
+  }
+}
+
+export function downloadGpxFile(file) {
+  const url = URL.createObjectURL(file);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
+  link.download = file.name;
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

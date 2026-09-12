@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#087e6e">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2463dc">
   <meta name="description" content="Planifica tus rutas en bicicleta y consulta el viento, la lluvia y la temperatura a lo largo del recorrido.">
   <title>RideCast | Rutas y tiempo</title>
   <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
@@ -19,63 +19,82 @@
       <button type="button" class="menu-button" data-window="library"><i data-lucide="folder-heart"></i><span>Mis rutas</span><span id="navCount" class="count">0</span></button>
       <button type="button" class="menu-button" data-window="forecast"><i data-lucide="cloud-sun"></i><span>Previsión</span></button>
     </nav>
-    <div class="sidebar-bottom"><i data-lucide="bike"></i><span>Cada salida cuenta.</span></div>
+    <div class="sidebar-bottom"><i data-lucide="bike"></i><span>Rutas y meteorología</span></div>
   </aside>
   <main class="app" id="mainContent">
     <header class="topbar">
-      <div><p class="eyebrow">RIDECAST / <span id="pageEyebrow">PLANIFICADOR</span></p><h1 id="pageTitle">Tu próxima salida</h1></div>
+      <a class="mobile-brand" href="#plan" aria-label="RideCast, inicio"><i data-lucide="route"></i><span>Ride<span>Cast</span></span></a>
+      <div class="page-heading"><p class="eyebrow"><span id="pageEyebrow">PLANIFICADOR</span></p><h1 id="pageTitle">Planifica tu salida</h1></div>
       <div class="topbar-right">
-        <button type="button" id="newRoute" class="secondary-button compact"><i data-lucide="plus"></i><span>Nueva ruta</span></button>
+        <button type="button" id="newRoute" class="secondary-button compact" title="Nueva ruta" aria-label="Nueva ruta"><i data-lucide="plus"></i><span>Nueva ruta</span></button>
         <button type="button" id="themeToggle" class="icon-button" title="Cambiar tema" aria-label="Cambiar tema"><i data-lucide="moon"></i></button>
       </div>
     </header>
-    <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden></div>
+    <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden><span id="statusSymbol" aria-hidden="true"></span><span id="statusMessage"></span><button id="dismissStatus" type="button" class="icon-button" title="Cerrar aviso" aria-label="Cerrar aviso"><i data-lucide="x"></i></button></div>
 
     <section class="window active" data-window-panel="plan" aria-label="Planificador">
       <div class="planner-layout">
         <section class="planner-map-section">
-          <div class="section-heading"><h2>Recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
+          <div class="section-heading route-heading"><h2><i data-lucide="route"></i>Tu recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
           <div id="planMapWrap" class="plan-map-wrap">
-            <div id="planMap" class="plan-map"></div>
+            <button type="button" id="useDeviceLocation" class="icon-button map-location-btn" title="Usar mi ubicación como salida" aria-label="Usar mi ubicación como salida"><i data-lucide="locate-fixed"></i></button>
+            <div id="planMap" class="plan-map" aria-label="Mapa del recorrido" title="Añadir punto al recorrido"></div>
             <button type="button" id="planFullscreenBtn" class="icon-button map-fullscreen-btn" title="Pantalla completa" aria-label="Pantalla completa"><i data-lucide="maximize"></i></button>
           </div>
-          <div class="waypoint-toolbar"><span id="waypointCount">0 puntos</span><div class="inline-actions">
+          <div class="waypoint-toolbar"><details class="waypoint-details"><summary><i data-lucide="map-pinned"></i><span id="waypointCount">0 puntos</span><i data-lucide="chevron-down"></i></summary><ol id="waypointList" class="waypoint-list"></ol></details><div class="inline-actions">
             <button type="button" id="undoWaypoint" class="icon-button" title="Deshacer último punto" aria-label="Deshacer último punto"><i data-lucide="undo-2"></i></button>
             <button type="button" id="clearWaypoints" class="icon-button" title="Borrar recorrido" aria-label="Borrar recorrido"><i data-lucide="trash-2"></i></button>
           </div></div>
-          <ol id="waypointList" class="waypoint-list"></ol>
-          <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM</p>
+          <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM / BRouter</p>
         </section>
         <aside class="ride-settings">
+          <form id="generatorForm" class="generator-section">
+            <div class="section-heading"><h2><i data-lucide="route"></i>Ruta automática</h2><span class="source-label">Circular</span></div>
+            <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
+            <div class="surface-field"><label for="routeSurface">Firme preferido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Caminos de tierra (MTB)</option></select></div>
+            <div class="generator-actions"><button id="generateRoute" type="button" class="secondary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
+            <p class="muted source-note">Preferencia de firme, no exclusividad. Puede haber enlaces por otras superficies o tramos sin datos. Rutas: BRouter / OpenStreetMap.</p>
+            <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
+          </form>
+          <section id="generatedRouteSave" class="generated-route-save" hidden aria-label="Guardar ruta generada">
+            <label for="generatedRouteName">Nombre de la ruta</label>
+            <input id="generatedRouteName" type="text" maxlength="100" placeholder="Mi ruta circular">
+            <button id="saveGeneratedRoute" type="button" class="secondary-button"><i data-lucide="bookmark-plus"></i><span>Guardar ruta</span></button>
+            <p id="generatedSaveStatus" class="muted" role="status" aria-live="polite">Se guardará en Mis rutas de este navegador.</p>
+          </section>
           <form id="rideForm">
-            <div class="section-heading"><h2>Salida</h2><i data-lucide="sliders-horizontal"></i></div>
-            <section class="form-section">
-              <label for="departure">Fecha y hora</label>
+            <div class="section-heading"><h2><i data-lucide="calendar-days"></i>Tu salida</h2><span class="section-number">01</span></div>
+            <section class="form-section departure-fields">
+              <div class="date-field"><label for="departure">Fecha y hora</label>
               <input id="departure" name="departure" type="datetime-local" required>
-              <label for="speed">Velocidad media</label>
-              <div class="unit-input"><input id="speed" name="speed" type="number" min="8" max="45" step="1" value="23" required><span>km/h</span></div>
+              </div><div class="speed-field"><label for="speed">Velocidad media</label>
+              <div class="speed-control"><button type="button" id="decreaseSpeed" class="icon-button" title="Reducir velocidad" aria-label="Reducir velocidad"><i data-lucide="minus"></i></button><div class="unit-input"><input id="speed" name="speed" type="number" inputmode="numeric" min="8" max="45" step="1" value="23" required><span>km/h</span></div><button type="button" id="increaseSpeed" class="icon-button" title="Aumentar velocidad" aria-label="Aumentar velocidad"><i data-lucide="plus"></i></button></div>
+              </div>
             </section>
-            <section class="form-section">
-              <div class="label-row"><label for="samples">Puntos de previsión</label><output id="samplesOut" for="samples">8</output></div>
+            <details class="form-section precision-section">
+              <summary><span><i data-lucide="sliders-horizontal"></i>Detalle de la previsión</span><i data-lucide="chevron-down"></i></summary>
+              <div class="precision-fields"><div class="label-row"><label for="samples">Puntos de previsión</label><output id="samplesOut" for="samples">8</output></div>
               <input id="samples" name="samples" type="range" min="4" max="12" value="8">
               <div class="range-row"><span>4</span><span>12</span></div>
-            </section>
+              </div></details>
             <div class="plan-actions">
               <button type="submit" class="primary-button"><i data-lucide="cloud-sun"></i><span>Calcular previsión</span></button>
               <button type="button" id="exportPlanRoute" class="secondary-button"><i data-lucide="download"></i><span>Exportar GPX</span></button>
+              <button type="button" data-garmin class="secondary-button"><i data-lucide="send"></i><span>Garmin Connect</span></button>
             </div>
           </form>
           <a href="#library" class="import-link"><i data-lucide="upload"></i>Importar una ruta<i data-lucide="arrow-right"></i></a>
           <p class="muted source-note">Previsión de Open-Meteo. Las condiciones reales pueden variar.</p>
         </aside>
       </div>
+      <div class="mobile-action"><button type="submit" form="rideForm" class="primary-button"><i data-lucide="cloud-sun"></i><span>Calcular previsión</span><i data-lucide="arrow-right" class="action-arrow"></i></button></div>
     </section>
 
     <section class="window" data-window-panel="library" aria-label="Mis rutas" hidden>
       <div class="library-layout">
         <aside class="library-tools">
           <section id="importSection">
-            <div class="section-heading"><h2>Importar recorrido</h2><i data-lucide="upload"></i></div>
+            <div class="section-heading"><h2><i data-lucide="upload"></i>Importar recorrido</h2></div>
             <label class="file-drop" for="routeFile"><i data-lucide="file-up"></i><strong>Seleccionar fichero</strong><span>GPX o TCX · Hasta 10 MB</span><input id="routeFile" type="file" accept=".gpx,.tcx,.xml"></label>
             <p id="importStatus" class="muted" role="status"></p>
           </section>
@@ -86,12 +105,12 @@
             <div class="save-actions"><button type="button" id="saveRoute" class="primary-button"><i data-lucide="bookmark-plus"></i>Guardar</button><button type="button" id="exportRoute" class="icon-button" title="Exportar ruta actual" aria-label="Exportar ruta actual"><i data-lucide="download"></i></button></div>
             <p class="muted source-note">Guardadas en este navegador. Exporta tus rutas para llevarlas a otro dispositivo.</p>
           </section>
-          <section class="provider-section"><h2>Strava y Wikiloc</h2><p class="muted">Importación mediante archivos GPX. Conexión directa no configurada.</p><div class="provider-links"><a href="https://www.strava.com/athlete/routes" target="_blank" rel="noopener noreferrer">Strava<i data-lucide="external-link"></i></a><a href="https://www.wikiloc.com/" target="_blank" rel="noopener noreferrer">Wikiloc<i data-lucide="external-link"></i></a></div></section>
+          <section class="provider-section"><h2>Más recorridos</h2><div class="provider-links"><a href="https://www.wikiloc.com/" target="_blank" rel="noopener noreferrer">Abrir Wikiloc<i data-lucide="external-link"></i></a></div></section>
         </aside>
         <section id="savedSection" class="library-list">
           <div class="section-heading"><h2>Tu colección</h2><span id="savedCount" class="source-label">0 rutas</span></div>
           <div class="library-toolbar">
-            <div class="search-field"><i data-lucide="search"></i><input id="routeSearch" type="search" aria-label="Buscar rutas guardadas" placeholder="Buscar por nombre"></div>
+            <div class="search-field"><i data-lucide="search"></i><input id="routeSearch" type="search" aria-label="Buscar rutas guardadas" placeholder="Buscar una ruta"></div>
             <select id="routeSort" aria-label="Ordenar rutas"><option value="recent">Más recientes</option><option value="name">Nombre A–Z</option><option value="distance">Mayor distancia</option></select>
           </div>
           <div id="savedRoutes" class="saved-routes"></div>
@@ -110,16 +129,15 @@
         <div class="forecast-toolbar">
           <div><h2 id="forecastTitle">Tiempo en ruta</h2><p id="forecastDate" class="muted">Sin previsión calculada</p></div>
           <div class="forecast-actions">
+            <button type="button" data-garmin class="secondary-button"><i data-lucide="send"></i><span>Garmin Connect</span></button>
             <div class="segmented" role="group" aria-label="Variable meteorológica">
               <button type="button" class="chip active" data-mode="wind" aria-pressed="true"><i data-lucide="wind"></i><span>Viento</span></button>
               <button type="button" class="chip" data-mode="rain" aria-pressed="false"><i data-lucide="cloud-rain"></i><span>Lluvia</span></button>
-              <button type="button" class="chip" data-mode="temp" aria-pressed="false"><i data-lucide="thermometer"></i><span>Temperatura</span></button>
+              <button type="button" class="chip" data-mode="temp" aria-label="Temperatura" aria-pressed="false"><i data-lucide="thermometer"></i><span class="mode-label">Temperatura</span><span class="short-label" aria-hidden="true">Temp.</span></button>
             </div>
-            <button type="button" id="fitRoute" class="icon-button" title="Ajustar mapa a la ruta" aria-label="Ajustar mapa a la ruta"><i data-lucide="scan"></i></button>
-            <button type="button" id="saveForecast" class="icon-button" title="Guardar esta ruta" aria-label="Guardar esta ruta"><i data-lucide="bookmark-plus"></i></button>
           </div>
         </div>
-        <div class="map-panel"><div id="routeMap" class="route-map"></div></div>
+        <div class="map-panel"><div id="routeMap" class="route-map" aria-label="Mapa meteorológico"></div><div class="forecast-map-tools"><button type="button" id="fitRoute" class="icon-button" title="Ajustar mapa a la ruta" aria-label="Ajustar mapa a la ruta"><i data-lucide="scan"></i></button><button type="button" id="saveForecast" class="icon-button" title="Guardar esta ruta" aria-label="Guardar esta ruta"><i data-lucide="bookmark-plus"></i></button></div></div>
         <div id="mapLegend" class="map-legend"><span><i class="dot good"></i>Favorables</span><span><i class="dot watch"></i>Atención</span><span><i class="dot bad"></i>Exigentes</span><span class="legend-caption">Condiciones del recorrido</span></div>
         <div class="section-heading timeline-head"><h2>Previsión por tramo</h2><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" class="data-source">Open-Meteo<i data-lucide="external-link"></i></a></div>
         <div id="timeline" class="timeline"></div>
@@ -131,13 +149,21 @@
       <div class="segment-top"><span class="segment-km"></span><span class="weather-icon"></span></div>
       <h3 class="segment-name"></h3><p class="segment-meta"></p>
       <div class="bar"><div class="bar-fill"></div></div>
-      <dl class="segment-values"><div><dt>Temperatura</dt><dd class="temp"></dd></div><div><dt>Viento</dt><dd class="wind"></dd></div><div><dt>Rachas</dt><dd class="gust"></dd></div><div><dt>Lluvia</dt><dd class="rain"></dd></div></dl>
+      <dl class="segment-values"><div><dt><i data-lucide="thermometer"></i>Temperatura</dt><dd class="temp"></dd></div><div><dt><i data-lucide="wind"></i>Viento</dt><dd class="wind"></dd></div><div><dt><i data-lucide="gauge"></i>Rachas</dt><dd class="gust"></dd></div><div><dt><i data-lucide="droplets"></i>Lluvia</dt><dd class="rain"></dd></div></dl>
     </article>
   </template>
   <dialog id="importModal" class="import-dialog">
     <form method="dialog" id="importForm"><div class="section-heading"><h2>¿Cuándo sales?</h2><button value="cancel" class="icon-button" title="Cancelar importación" aria-label="Cancelar importación" formnovalidate><i data-lucide="x"></i></button></div><label for="importDeparture">Fecha y hora de salida</label><input id="importDeparture" type="datetime-local" required><div class="dialog-actions"><button id="importCancel" value="cancel" class="secondary-button" formnovalidate>Cancelar</button><button id="importConfirm" value="confirm" class="primary-button">Importar ruta</button></div></form>
   </dialog>
   <script src="./vendor/leaflet/leaflet.js"></script>
+  <dialog id="garminModal" class="import-dialog garmin-dialog" aria-labelledby="garminTitle">
+    <form method="dialog"><div class="section-heading"><h2 id="garminTitle">Garmin Connect</h2><button class="icon-button" aria-label="Cerrar Garmin Connect" title="Cerrar"><i data-lucide="x"></i></button></div></form>
+    <p id="garminRouteName" class="garmin-route-name"></p>
+    <p class="muted">Archivo GPX para Garmin Connect. No se envía directamente al dispositivo.</p>
+    <ol class="garmin-steps"><li>Comparte el archivo y elige Garmin Connect. Si no aparece, descarga el GPX y ábrelo con Connect o impórtalo en su web.</li><li>Guarda el trayecto en Connect y selecciona «Enviar a dispositivo» para sincronizarlo con tu Garmin compatible.</li></ol>
+    <p id="garminStatus" role="status" aria-live="polite"></p>
+    <div class="garmin-actions"><button id="garminShare" type="button" class="primary-button"><i data-lucide="share-2"></i>Compartir GPX</button><button id="garminDownload" type="button" class="secondary-button"><i data-lucide="download"></i>Descargar GPX</button><a class="import-link" href="https://connect.garmin.com/modern/courses" target="_blank" rel="noopener noreferrer">Abrir Garmin Connect web<i data-lucide="external-link"></i></a></div>
+  </dialog>
   <script src="./vendor/lucide.js"></script>
   <script type="module" src="./app.js"></script>
 </body>

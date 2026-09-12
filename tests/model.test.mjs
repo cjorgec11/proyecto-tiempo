@@ -2,7 +2,8 @@ import test, { beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { pathDistance, sampleRoute, routeSlice, parseRouteFile, buildGpx, validCoordinate,
-  weatherFor, nearestHourIndex, readSavedRoutes, writeSavedRoutes, routeAcross, riskFor } from "../js/model.js";
+  weatherFor, nearestHourIndex, readSavedRoutes, writeSavedRoutes, routeAcross, riskFor, generateRoundTrip,
+  surfaceBreakdown, repeatedRouteRatio } from "../js/model.js";
 
 const browser = new JSDOM("", { url: "https://ridecast.test/" });
 globalThis.DOMParser = browser.window.DOMParser;
@@ -11,6 +12,76 @@ const originalFetch = globalThis.fetch;
 const coords = [{ lat:40.4, lon:-3.7 }, { lat:40.41, lon:-3.71 }, { lat:40.42, lon:-3.72 }];
 beforeEach(() => localStorage.clear());
 afterEach(() => { globalThis.fetch = originalFetch; });
+
+const surfaceResponse = (points, distance) => ({ok:true, json:async()=>({type:'FeatureCollection',features:[{
+  properties:{'track-length':String(distance)}, geometry:{type:'LineString',coordinates:points}
+}]})});
+
+test("generador: refina la distancia con el perfil de asfalto y cierra el circuito", async () => {
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    calls++;
+    assert.match(url, /brouter.de\/brouter/);
+    const request = new URL(url);
+    const stops = request.searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    assert.deepEqual(stops[0], stops.at(-1));
+    assert.equal(stops.length, 5);
+    assert.equal(request.searchParams.get('profile'), 'fastbike');
+    assert.equal(request.searchParams.get('profile:allow_steps'), '0');
+    return surfaceResponse(stops, calls === 1 ? 37000 : 30100);
+  };
+  const route = await generateRoundTrip(coords[0], 30, 90);
+  assert.equal(route.distance, 30.1);
+  assert.deepEqual(route.coords[0], route.coords.at(-1));
+  assert.equal(calls, 2);
+  assert.ok(route.generation.error < 0.01);
+});
+
+test("generador: el modo tierra usa MTB y conserva la preferencia", async () => {
+  globalThis.fetch = async url => {
+    const params = new URL(url).searchParams;
+    assert.equal(params.get('profile'),'mtb');
+    assert.equal(params.get('profile:StrictNOBicycleaccess'),'1');
+    return surfaceResponse(params.get('lonlats').split('|').map(p=>p.split(',').map(Number)), 30000);
+  };
+  const route = await generateRoundTrip(coords[0],30,0,{surface:'dirt'});
+  assert.equal(route.generation.surface,'dirt');
+  await assert.rejects(generateRoundTrip(coords[0],30,0,{surface:'invalid'}), /Selecciona/);
+});
+
+test("firme: no confunde superficies desconocidas con asfalto", () => {
+  assert.deepEqual(surfaceBreakdown([['WayTags','Distance'],['surface=asphalt','500'],['surface=ground','300'],['highway=residential','200']]), {paved:0.5, unpaved:0.3, unknown:0.2});
+  assert.equal(surfaceBreakdown([]), null);
+  assert.equal(surfaceBreakdown([['Distance','WayTags'],['NaN','surface=asphalt']]), null);
+});
+
+test("repetición: detecta una vuelta por el mismo tramo y no penaliza un circuito", () => {
+  assert.equal(repeatedRouteRatio([coords[0],coords[1],coords[0]]),0.5);
+  assert.equal(repeatedRouteRatio([coords[0],coords[1],coords[2],coords[0]]),0);
+});
+
+test("generador: valida límites y no inventa geometría si el servicio falla", async () => {
+  await assert.rejects(generateRoundTrip(null,30,0), /salida/);
+  await assert.rejects(generateRoundTrip(coords[0],4,0), /5 y 150/);
+  await assert.rejects(generateRoundTrip(coords[0],151,0), /5 y 150/);
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error('Sin servicio'); };
+  await assert.rejects(generateRoundTrip(coords[0],30,0), /servicio de rutas/);
+  assert.equal(calls,6);
+});
+
+test("generador: rechaza circuitos lejos de la salida o sin cerrar y respeta cancelación", async () => {
+  globalThis.fetch = async () => surfaceResponse([[10,50],[10.1,50.1],[10.2,50.2]],30000);
+  await assert.rejects(generateRoundTrip(coords[0],30,0), /No se encontró/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(generateRoundTrip(coords[0],30,0,{signal:controller.signal}), {name:'AbortError'});
+});
+
+test("generador: no acepta una desviación del 6 % aunque antes se admitiera", async () => {
+  globalThis.fetch = async url => surfaceResponse(new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number)),31800);
+  await assert.rejects(generateRoundTrip(coords[0],30,0), /5 %/);
+});
 
 test("geometría: muestras y subtramos mantienen salida y llegada", () => {
   const samples = sampleRoute(coords, 8);
