@@ -23,7 +23,7 @@ const view = await import("../js/view.js");
 const click = selector => document.querySelector(selector).click();
 const wait = () => new Promise(resolve=>setTimeout(resolve,10));
 const coords = [{lat:40.4,lon:-3.7},{lat:40.42,lon:-3.72}];
-const generatedResponse = () => ({ok:true,json:async()=>({type:'FeatureCollection',features:[{properties:{'track-length':'30000'},geometry:{type:'LineString',coordinates:[[-3.7,40.4],[-3.6,40.5],[-3.5,40.4],[-3.7,40.4]]}}]})});
+const generatedResponse = () => ({ok:true,json:async()=>({type:'FeatureCollection',features:[{properties:{'track-length':'30000',messages:[['Distance','WayTags'],['30000','surface=ground']]},geometry:{type:'LineString',coordinates:[[-3.7,40.4],[-3.6,40.5],[-3.5,40.4],[-3.7,40.4]]}}]})});
 initApp();
 after(()=>page.window.close());
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { pathDistance, sampleRoute, routeSlice, parseRouteFile, buildGpx, validCoordinate,
   weatherFor, nearestHourIndex, readSavedRoutes, writeSavedRoutes, routeAcross, riskFor, generateRoundTrip,
-  surfaceBreakdown, repeatedRouteRatio } from "../js/model.js";
+  surfaceBreakdown, repeatedRouteRatio, matchesSurface, isEntirelyPavedRoad } from "../js/model.js";
 
 const browser = new JSDOM("", { url: "https://ridecast.test/" });
 globalThis.DOMParser = browser.window.DOMParser;
@@ -13,8 +13,8 @@ const coords = [{ lat:40.4, lon:-3.7 }, { lat:40.41, lon:-3.71 }, { lat:40.42, l
 beforeEach(() => localStorage.clear());
 afterEach(() => { globalThis.fetch = originalFetch; });
 
-const surfaceResponse = (points, distance) => ({ok:true, json:async()=>({type:'FeatureCollection',features:[{
-  properties:{'track-length':String(distance)}, geometry:{type:'LineString',coordinates:points}
+const surfaceResponse = (points, distance, surface = 'asphalt') => ({ok:true, json:async()=>({type:'FeatureCollection',features:[{
+  properties:{'track-length':String(distance),messages:[['Distance','WayTags'],[String(distance),`surface=${surface} highway=residential`]]}, geometry:{type:'LineString',coordinates:points}
 }]})});
 
 test("generador: refina la distancia con el perfil de asfalto y cierra el circuito", async () => {
@@ -42,7 +42,7 @@ test("generador: el modo tierra usa MTB y conserva la preferencia", async () => 
     const params = new URL(url).searchParams;
     assert.equal(params.get('profile'),'mtb');
     assert.equal(params.get('profile:StrictNOBicycleaccess'),'1');
-    return surfaceResponse(params.get('lonlats').split('|').map(p=>p.split(',').map(Number)), 30000);
+    return surfaceResponse(params.get('lonlats').split('|').map(p=>p.split(',').map(Number)), 30000, 'ground');
   };
   const route = await generateRoundTrip(coords[0],30,0,{surface:'dirt'});
   assert.equal(route.generation.surface,'dirt');
@@ -53,6 +53,65 @@ test("firme: no confunde superficies desconocidas con asfalto", () => {
   assert.deepEqual(surfaceBreakdown([['WayTags','Distance'],['surface=asphalt','500'],['surface=ground','300'],['highway=residential','200']]), {paved:0.5, unpaved:0.3, unknown:0.2});
   assert.equal(surfaceBreakdown([]), null);
   assert.equal(surfaceBreakdown([['Distance','WayTags'],['NaN','surface=asphalt']]), null);
+});
+
+test("firme: exige predominio confirmado y cuenta los tramos sin describir", () => {
+  assert.equal(matchesSurface(null, 'dirt'), false);
+  assert.equal(matchesSurface({paved:0.55,unpaved:0.12,unknown:0.33}, 'dirt'), false);
+  assert.equal(matchesSurface({paved:0.2,unpaved:0.7,unknown:0.1}, 'dirt'), true);
+  assert.equal(matchesSurface({paved:0.9,unpaved:0.1,unknown:0}, 'asphalt'), false);
+  assert.equal(matchesSurface({paved:0.9,unpaved:0.01,unknown:0.09}, 'asphalt', true), false);
+  assert.deepEqual(surfaceBreakdown([['Distance','WayTags'],['100','surface=ground']],1000), {paved:0,unpaved:0.1,unknown:0.9});
+});
+
+test("asfalto: exige carretera en todos los tramos, incluso si el sendero está asfaltado", () => {
+  const table = tags => [['Distance','WayTags'],['999','highway=residential surface=asphalt'],['1',tags]];
+  for (const highway of ['path','track','footway','steps','cycleway','pedestrian','motorway']) {
+    assert.equal(isEntirelyPavedRoad(table(`highway=${highway} surface=asphalt`),1000),false);
+  }
+  for (const tags of ['highway=residential','surface=asphalt','highway=secondary surface=ground']) {
+    assert.equal(isEntirelyPavedRoad(table(tags),1000),false);
+  }
+  const valid = table('highway=secondary surface=asphalt');
+  assert.equal(isEntirelyPavedRoad(valid,1000),true);
+  assert.equal(isEntirelyPavedRoad(valid,1001),false);
+  assert.equal(isEntirelyPavedRoad(null,1000),false);
+  assert.equal(matchesSurface({paved:1,unpaved:0,unknown:0},'asphalt'),false);
+  assert.equal(matchesSurface({paved:1,unpaved:0,unknown:0},'asphalt',true),true);
+});
+
+test("generador: descarta asfalto en modo tierra aunque la distancia sea exacta", async () => {
+  let calls = 0;
+  globalThis.fetch = async url => {
+    calls++;
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return surfaceResponse(stops,30000,calls === 1 ? 'asphalt' : 'ground');
+  };
+  const route = await generateRoundTrip(coords[0],30,0,{surface:'dirt'});
+  assert.equal(calls,2);
+  assert.equal(route.generation.surfaces.unpaved,1);
+});
+
+test("montaña: busca menos asfalto aunque la primera ruta ajuste mejor la distancia", async () => {
+  let calls = 0;
+  globalThis.fetch = async url => {
+    calls++;
+    const distance = calls === 1 ? 30000 : 30900;
+    const paved = calls === 1 ? 0.04 : 0.01;
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return {ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:stops},properties:{
+      'track-length':String(distance), messages:[['Distance','WayTags'],[String(distance*paved),'surface=asphalt'],[String(distance*(1-paved)),'surface=ground']]
+    }}]})};
+  };
+  const route = await generateRoundTrip(coords[0],30,0,{surface:'dirt'});
+  assert.equal(calls,6);
+  assert.equal(route.distance,30.9);
+  assert.equal(route.generation.surfaces.paved,0.01);
+});
+
+test("generador: rechaza rutas sin información del firme", async () => {
+  globalThis.fetch = async url => surfaceResponse(new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number)),30000,'unknown');
+  await assert.rejects(generateRoundTrip(coords[0],30,0,{surface:'dirt'}), /60 %/);
 });
 
 test("repetición: detecta una vuelta por el mismo tramo y no penaliza un circuito", () => {

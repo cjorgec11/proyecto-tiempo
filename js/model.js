@@ -129,7 +129,7 @@ function destination(origin, km, heading) {
   return { lat: nextLat / rad, lon: ((nextLon / rad + 540) % 360) - 180 };
 }
 
-export function surfaceBreakdown(messages) {
+export function surfaceBreakdown(messages, routeMeters = 0) {
   const totals = { paved: 0, unpaved: 0, unknown: 0 };
   if (!Array.isArray(messages) || !Array.isArray(messages[0])) return null;
   const distanceIndex = messages[0].indexOf("Distance"), tagsIndex = messages[0].indexOf("WayTags");
@@ -144,8 +144,37 @@ export function surfaceBreakdown(messages) {
     const unpaved = ["unpaved", "ground", "dirt", "earth", "gravel", "fine_gravel", "compacted", "grass", "sand", "mud", "clay", "pebblestone"].includes(surface);
     totals[paved ? "paved" : unpaved ? "unpaved" : "unknown"] += distance;
   }
+  const described = totals.paved + totals.unpaved + totals.unknown;
+  if (Number.isFinite(routeMeters) && routeMeters > described) totals.unknown += routeMeters - described;
   const total = totals.paved + totals.unpaved + totals.unknown;
   return total ? Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, value / total])) : null;
+}
+
+export function isEntirelyPavedRoad(messages, routeMeters) {
+  if (!Array.isArray(messages) || !Array.isArray(messages[0]) || !(routeMeters > 0)) return false;
+  const distanceIndex = messages[0].indexOf("Distance"), tagsIndex = messages[0].indexOf("WayTags");
+  if (distanceIndex < 0 || tagsIndex < 0) return false;
+  const roads = new Set(["primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "unclassified", "residential", "living_street", "service"]);
+  const pavement = new Set(["asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes"]);
+  let covered = 0;
+  for (const row of messages.slice(1)) {
+    if (!Array.isArray(row)) return false;
+    const distance = Number(row[distanceIndex]);
+    if (!Number.isFinite(distance) || distance < 0) return false;
+    if (distance === 0) continue;
+    const tags = Object.fromEntries(String(row[tagsIndex] || "").split(/\s+/).filter(tag => tag.includes("=")).map(tag => tag.split("=")));
+    if (!roads.has(tags.highway) || !pavement.has(tags.surface)) return false;
+    covered += distance;
+  }
+  // Sin cobertura completa no se puede afirmar que todo el circuito sea carretera.
+  return covered >= routeMeters;
+}
+
+export function matchesSurface(surfaces, surface, pavedRoadVerified = false) {
+  if (!surfaces) return false;
+  if (surface === "asphalt") return pavedRoadVerified && surfaces.paved === 1 && surfaces.unpaved === 0 && surfaces.unknown === 0;
+  if (surface === "dirt") return surfaces.unpaved >= 0.60 && surfaces.paved <= 0.25;
+  return false;
 }
 
 export async function routeForSurface(points, surface, { signal } = {}) {
@@ -164,7 +193,8 @@ export async function routeForSurface(points, surface, { signal } = {}) {
   if (!coords || coords.length < 3 || !coords.every(validCoordinate) || !Number.isFinite(distance) || distance <= 0) {
     throw new Error("El servicio no ha devuelto un recorrido válido para ese firme.");
   }
-  return { coords, distance, routed: true, surface, surfaces: surfaceBreakdown(feature.properties.messages) };
+  return { coords, distance, routed: true, surface, surfaces: surfaceBreakdown(feature.properties.messages, distance * 1000),
+    pavedRoadVerified: isEntirelyPavedRoad(feature.properties.messages, distance * 1000) };
 }
 
 export function repeatedRouteRatio(coords) {
@@ -188,7 +218,7 @@ export async function generateRoundTrip(start, targetKm, heading, { surface = "a
   if (!Number.isFinite(targetKm) || targetKm < 5 || targetKm > 150) throw new Error("Elige una distancia entre 5 y 150 km.");
   if (!Number.isFinite(heading)) throw new Error("Selecciona una orientación válida.");
   if (!["asphalt", "dirt"].includes(surface)) throw new Error("Selecciona asfalto o caminos de tierra.");
-  let radius = targetKm / 6, best = null, received = false;
+  let radius = targetKm / 6, best = null, received = false, matchingFirme = false;
   for (let attempt = 0; attempt < 6; attempt++) {
     signal?.throwIfAborted();
     if (attempt) await new Promise(resolve => setTimeout(resolve, 1100));
@@ -205,19 +235,32 @@ export async function generateRoundTrip(start, targetKm, heading, { surface = "a
       const nearStart = haversine(start, route.coords[0]) <= 0.25;
       const error = Math.abs(route.distance - targetKm) / targetKm;
       const repeated = repeatedRouteRatio(route.coords);
-      const score = error + repeated * 0.25;
-      if (closed && nearStart && error <= 0.05 && repeated <= 0.2 && (!best || score < best.score)) best = { ...route, error, repeated, score };
-      if (best?.error <= 0.02 && best.repeated <= 0.08) break;
+      const suitable = matchesSurface(route.surfaces, surface, route.pavedRoadVerified);
+      matchingFirme ||= suitable;
+      const preferred = route.surfaces?.[surface === "asphalt" ? "paved" : "unpaved"] ?? 0;
+      const score = (1 - preferred) + error + repeated * 0.25;
+      // En MTB, minimizar primero el pavimento conocido; los empates favorecen datos completos.
+      const better = !best || (surface === "dirt" && suitable
+        ? route.surfaces.paved < best.surfaces.paved
+          || (route.surfaces.paved === best.surfaces.paved && (route.surfaces.unknown < best.surfaces.unknown
+            || (route.surfaces.unknown === best.surfaces.unknown && score < best.score)))
+        : score < best.score);
+      if (suitable && closed && nearStart && error <= 0.05 && repeated <= 0.2 && better) best = { ...route, error, repeated, score, preferred };
+      const surfaceComplete = surface === "dirt" ? best?.preferred === 1 : best?.preferred >= 0.95;
+      if (best?.error <= 0.02 && best.repeated <= 0.08 && surfaceComplete) break;
       radius *= Math.max(0.6, Math.min(1.5, targetKm / route.distance));
     } catch {
       signal?.throwIfAborted();
     }
   }
+  if (!best && received && !matchingFirme) throw new Error(surface === "dirt"
+    ? "No se encontró un circuito con al menos un 60 % de tierra/grava y como máximo un 25 % pavimentado. Puede faltar información del firme. Prueba otra salida, orientación o distancia. Tu ruta anterior se conserva."
+    : "No se pudo verificar un circuito 100 % por carretera pavimentada: hay caminos, senderos o tramos sin datos suficientes. Prueba otra salida, orientación o distancia. Tu ruta anterior se conserva.");
   if (!best) throw new Error(received
     ? "No se encontró un circuito dentro del 5 % de la distancia y con pocos tramos repetidos. Prueba otra orientación o distancia. Tu ruta anterior se conserva."
     : "El servicio de rutas por firme no ha podido responder. Inténtalo de nuevo. Tu ruta anterior se conserva.");
   return { coords: best.coords, distance: best.distance, routed: true,
-    generation: { surface, surfaces: best.surfaces, targetKm, error: best.error, repeated: best.repeated } };
+    generation: { surface, surfaces: best.surfaces, pavedRoadVerified: best.pavedRoadVerified, targetKm, error: best.error, repeated: best.repeated } };
 }
 
 export function validCoordinate(point) {
