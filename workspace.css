@@ -394,3 +394,63 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   *,*::before,*::after { animation: none!important; transition: none!important; scroll-behavior: auto!important; }
 }
+
+/* Clear route entry points and progressive disclosure on compact screens. */
+.app { max-width: 1700px; }
+.topbar { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.sidebar { background: var(--paper); }
+.brand-icon { background: var(--accent-soft); border-radius: 8px; width: 44px; height: 44px; }
+.brand-icon svg { width: 26px; height: 26px; }
+.route-entry { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; max-width: 620px; margin-bottom: 24px; }
+.route-entry .secondary-button { background: var(--panel); border-color: transparent; min-height: 52px; }
+.route-entry .secondary-button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.route-entry svg { color: var(--accent); }
+.step-marker { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 14px; flex: none; }
+.section-heading h2 { display: flex; align-items: center; gap: 10px; }
+.generator-disclosure { border-bottom: 1px solid var(--line); margin-bottom: 26px; padding-bottom: 20px; }
+.generator-disclosure>summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-weight: 650; list-style: none; }
+.generator-disclosure>summary>span { display: flex; align-items: center; gap: 10px; }
+.generator-disclosure>summary svg:first-child { color: var(--accent); }
+.generator-disclosure[open]>summary>svg { transform: rotate(180deg); }
+.generator-disclosure>summary::-webkit-details-marker { display: none; }
+.generator-disclosure .generator-section { border: 0; padding: 16px 0 0; margin: 0; }
+.generator-actions .primary-button { flex: 1; }
+.surface-explanation { margin-top: 14px; }
+.surface-explanation summary { min-height: 44px; display: flex; align-items: center; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 4px; }
+.surface-explanation p { margin-bottom: 10px; }
+#generatorResult:empty { display: none; }
+#generatorResult:not(:empty) { padding: 12px; background: var(--panel); border-left: 3px solid var(--accent); margin-top: 12px; overflow-wrap: anywhere; }
+.library-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+.updates-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,0.85fr); gap: 48px; }
+.release-item { display: flex; gap: 18px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.release-item>svg { color: #158378; width: 24px; height: 24px; margin-top: 3px; }
+.release-item p { margin-top: 8px; color: var(--muted); max-width: 55ch; }
+.suggestion-section { padding-left: 32px; border-left: 1px solid var(--line); min-width: 0; }
+.suggestion-section>p { margin: 10px 0 20px; }
+#suggestionForm { display: grid; gap: 12px; margin-bottom: 28px; }
+#suggestionForm label { margin: 0; }
+#suggestionForm textarea { width: 100%; resize: vertical; min-height: 120px; max-height: 400px; font: inherit; padding: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 8px; }
+.suggestion-item { padding: 16px 0; border-top: 1px solid var(--line); }
+.suggestion-item strong { color: var(--accent); font-size: 14px; }
+.suggestion-item p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+@media (min-width: 861px) {
+  .planner-map-section { position: sticky; top: 20px; align-self: start; }
+}
+@media (max-width: 860px) {
+  .topbar { gap: 14px; padding-bottom: 18px; margin-bottom: 18px; }
+  .page-heading h1 { font-size: 24px; }
+  .app-menu { gap: 0; }
+  .menu-button { font-size: 12px; }
+  .updates-layout { grid-template-columns: minmax(0,1fr); gap: 32px; }
+  .suggestion-section { padding: 0; border: 0; }
+  .release-item { padding: 20px 0; }
+}
+@media (max-width: 620px) {
+  .route-entry { gap: 8px; margin-bottom: 20px; }
+  .route-entry .secondary-button { flex-direction: column; gap: 5px; padding: 10px 6px; font-size: 14px; }
+  .route-heading h2 { font-size: 17px; font-weight: 650; }
+  #planMap { height: clamp(260px,36svh,350px); }
+  .planner-layout { gap: 18px; }
+  .generator-disclosure { padding-top: 4px; }
+  .library-shortcuts .secondary-button { flex: 1; }
+}

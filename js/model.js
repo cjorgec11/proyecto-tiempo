@@ -40,6 +40,24 @@ export const weatherLabels = {
 
 const STORAGE_KEY = "ridecast.savedRoutes";
 
+export const suggestionCategories = {routes:"Rutas",weather:"Previsión",interface:"Interfaz",other:"Otra idea"};
+export function readSuggestions() {
+  const entries = JSON.parse(localStorage.getItem("ridecast.suggestions") || "[]");
+  if (!Array.isArray(entries) || entries.some(item => !item || typeof item.text !== "string" || typeof item.id !== "string" || !Object.hasOwn(suggestionCategories,item.category))) {
+    throw new Error("No se pueden leer las sugerencias guardadas. Los datos se han conservado.");
+  }
+  return entries;
+}
+export function saveSuggestion(text, category) {
+  text = text.trim();
+  if (!text || text.length > 2000 || !Object.hasOwn(suggestionCategories,category)) throw new Error("Escribe una sugerencia de entre 1 y 2000 caracteres.");
+  const entries = readSuggestions();
+  const entry = {id:crypto.randomUUID(),text,category,createdAt:new Date().toISOString()};
+  try { localStorage.setItem("ridecast.suggestions", JSON.stringify([entry,...entries])); }
+  catch { throw new Error("No se pudo guardar. Comprueba el espacio o los permisos del navegador."); }
+  return [entry,...entries];
+}
+
 export function setDefaultDeparture(input) {
   const date = new Date();
   date.setHours(date.getHours() + 2, 0, 0, 0);

@@ -144,8 +144,8 @@ test("Garmin impide rutas vacías y abre el diálogo con la ruta actual", () => 
   state.currentRouteCoords = [];
 });
 
-test("menú persistente: las tres ventanas cambian y actualizan el enlace", async()=>{
-  for (const name of ["library","forecast","plan"]) {
+test("menú persistente: las cuatro ventanas cambian y actualizan el enlace", async()=>{
+  for (const name of ["library","forecast","updates","plan"]) {
     click(`[data-window="${name}"]`);
     await wait();
     assert.equal(location.hash,"#"+name);
@@ -153,6 +153,36 @@ test("menú persistente: las tres ventanas cambian y actualizan el enlace", asyn
     assert.equal(document.querySelector(`[data-window-panel="${name}"]`).hidden,false);
     assert.equal(document.querySelector(`[data-window="${name}"]`).getAttribute("aria-current"),"page");
   }
+});
+
+test("sugerencias: guarda texto seguro, persiste y conserva el borrador si falla", async()=>{
+  const {readSuggestions} = await import('../js/model.js');
+  const form = document.querySelector('#suggestionForm');
+  const input = document.querySelector('#suggestionText');
+  const submit = () => form.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));
+  input.value = '   '; submit(); assert.equal(readSuggestions().length,0);
+  input.value = '<img src=x onerror=alert(1)> Más rutas'; submit();
+  assert.equal(readSuggestions().length,1);
+  assert.equal(document.querySelector('#suggestionList img'),null);
+  assert.match(document.querySelector('#suggestionList').textContent,/Más rutas/);
+  assert.equal(input.value,'');
+  assert.equal(document.querySelector('#exportSuggestions').disabled,false);
+  const original = window.Storage.prototype.setItem;
+  try {
+    window.Storage.prototype.setItem = () => {throw new Error('Quota');};
+    input.value = 'Otra sugerencia'; submit();
+    assert.equal(input.value,'Otra sugerencia');
+    assert.match(document.querySelector('#suggestionStatus').textContent,/No se pudo guardar/);
+    assert.equal(readSuggestions().length,1);
+  } finally {window.Storage.prototype.setItem = original;}
+});
+
+test("accesos del planificador: generar y dibujar conservan la ruta",()=>{
+  const previous = state.currentRouteCoords;
+  click('#quickDraw'); assert.equal(document.querySelector('#automaticOptions').open,false);
+  click('#quickGenerate'); assert.equal(document.querySelector('#automaticOptions').open,true);
+  assert.equal(document.activeElement.id,'targetDistance');
+  assert.equal(state.currentRouteCoords,previous);
 });
 
 test("todos los iconos estáticos existen en Lucide",()=>{

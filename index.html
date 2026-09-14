@@ -18,6 +18,7 @@
       <button type="button" class="menu-button active" data-window="plan" aria-current="page"><i data-lucide="map"></i><span>Planificar</span></button>
       <button type="button" class="menu-button" data-window="library"><i data-lucide="folder-heart"></i><span>Mis rutas</span><span id="navCount" class="count">0</span></button>
       <button type="button" class="menu-button" data-window="forecast"><i data-lucide="cloud-sun"></i><span>Previsión</span></button>
+      <button type="button" class="menu-button" data-window="updates"><i data-lucide="sparkles"></i><span>Novedades</span></button>
     </nav>
     <div class="sidebar-bottom"><i data-lucide="bike"></i><span>Rutas y meteorología</span></div>
   </aside>
@@ -33,9 +34,14 @@
     <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden><span id="statusSymbol" aria-hidden="true"></span><span id="statusMessage"></span><button id="dismissStatus" type="button" class="icon-button" title="Cerrar aviso" aria-label="Cerrar aviso"><i data-lucide="x"></i></button></div>
 
     <section class="window active" data-window-panel="plan" aria-label="Planificador">
+      <div class="route-entry" role="group" aria-label="Crear recorrido">
+        <button type="button" class="secondary-button" id="quickGenerate"><i data-lucide="wand-sparkles"></i><span>Generar</span></button>
+        <button type="button" class="secondary-button" id="quickDraw"><i data-lucide="map-pin-plus"></i><span>Dibujar</span></button>
+        <button type="button" class="secondary-button" id="quickImport"><i data-lucide="upload"></i><span>Importar</span></button>
+      </div>
       <div class="planner-layout">
         <section class="planner-map-section">
-          <div class="section-heading route-heading"><h2><i data-lucide="route"></i>Tu recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
+          <div class="section-heading route-heading"><h2><span class="step-marker">1</span>Tu recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
           <div id="planMapWrap" class="plan-map-wrap">
             <button type="button" id="useDeviceLocation" class="icon-button map-location-btn" title="Usar mi ubicación como salida" aria-label="Usar mi ubicación como salida"><i data-lucide="locate-fixed"></i></button>
             <div id="planMap" class="plan-map" aria-label="Mapa del recorrido" title="Añadir punto al recorrido"></div>
@@ -48,14 +54,16 @@
           <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM / BRouter</p>
         </section>
         <aside class="ride-settings">
+          <details class="generator-disclosure" id="automaticOptions" open>
+          <summary><span><i data-lucide="wand-sparkles"></i>Generar un circuito</span><i data-lucide="chevron-down"></i></summary>
           <form id="generatorForm" class="generator-section">
-            <div class="section-heading"><h2><i data-lucide="route"></i>Ruta automática</h2><span class="source-label">Circular</span></div>
             <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
             <div class="surface-field"><label for="routeSurface">Firme preferido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Caminos de tierra (MTB)</option></select></div>
-            <div class="generator-actions"><button id="generateRoute" type="button" class="secondary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
-            <p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava y hasta 25 % pavimentado para enlaces. Asfalto: solo carretera pavimentada, sin caminos ni senderos, según los datos del mapa. Los tramos sin datos se rechazan en modo asfalto.</p>
+            <div class="generator-actions"><button id="generateRoute" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
+            <details class="surface-explanation"><summary>Criterios del firme</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava y hasta 25 % pavimentado para enlaces. Asfalto: solo carretera pavimentada, sin caminos ni senderos, según los datos del mapa. Los tramos sin datos se rechazan en modo asfalto.</p></details>
             <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
           </form>
+          </details>
           <section id="generatedRouteSave" class="generated-route-save" hidden aria-label="Guardar ruta generada">
             <label for="generatedRouteName">Nombre de la ruta</label>
             <input id="generatedRouteName" type="text" maxlength="100" placeholder="Mi ruta circular">
@@ -63,7 +71,7 @@
             <p id="generatedSaveStatus" class="muted" role="status" aria-live="polite">Se guardará en Mis rutas de este navegador.</p>
           </section>
           <form id="rideForm">
-            <div class="section-heading"><h2><i data-lucide="calendar-days"></i>Tu salida</h2><span class="section-number">01</span></div>
+            <div class="section-heading"><h2><span class="step-marker">2</span>Tu salida</h2></div>
             <section class="form-section departure-fields">
               <div class="date-field"><label for="departure">Fecha y hora</label>
               <input id="departure" name="departure" type="datetime-local" required>
@@ -91,6 +99,7 @@
     </section>
 
     <section class="window" data-window-panel="library" aria-label="Mis rutas" hidden>
+      <div class="library-shortcuts"><button type="button" class="secondary-button" id="libraryImport"><i data-lucide="upload"></i>Importar</button><button type="button" class="secondary-button" id="librarySave"><i data-lucide="bookmark-plus"></i>Guardar actual</button></div>
       <div class="library-layout">
         <aside class="library-tools">
           <section id="importSection">
@@ -98,7 +107,7 @@
             <label class="file-drop" for="routeFile"><i data-lucide="file-up"></i><strong>Seleccionar fichero</strong><span>GPX o TCX · Hasta 10 MB</span><input id="routeFile" type="file" accept=".gpx,.tcx,.xml"></label>
             <p id="importStatus" class="muted" role="status"></p>
           </section>
-          <section class="save-section">
+          <section class="save-section" id="saveCurrentSection">
             <h2>Guardar ruta actual</h2>
             <label for="saveName">Nombre de la ruta</label>
             <input id="saveName" type="text" maxlength="100" placeholder="Salida del domingo">
@@ -142,6 +151,29 @@
         <div class="section-heading timeline-head"><h2>Previsión por tramo</h2><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" class="data-source">Open-Meteo<i data-lucide="external-link"></i></a></div>
         <div id="timeline" class="timeline"></div>
       </section>
+    </section>
+    <section class="window" data-window-panel="updates" aria-label="Novedades y sugerencias" hidden>
+      <div class="updates-layout">
+        <section class="release-notes">
+          <div class="section-heading"><h2>Lo nuevo en RideCast</h2><span class="source-label">Septiembre 2026</span></div>
+          <article class="release-item"><i data-lucide="route"></i><div><h3>El firme importa</h3><p>Carretera verificada según los datos del mapa. En montaña, menos pavimento entre las alternativas válidas.</p></div></article>
+          <article class="release-item"><i data-lucide="bookmark-check"></i><div><h3>De circuito a ruta guardada</h3><p>Pon nombre al recorrido generado y recupéralo desde Mis rutas.</p></div></article>
+          <article class="release-item"><i data-lucide="send"></i><div><h3>Tu recorrido en Garmin Connect</h3><p>Comparte o descarga el GPX para importarlo en Connect.</p></div></article>
+          <article class="release-item"><i data-lucide="cloud-sun"></i><div><h3>El tiempo, tramo a tramo</h3><p>Consulta viento, lluvia y temperatura según la hora estimada de paso.</p></div></article>
+        </section>
+        <section class="suggestion-section">
+          <h2>¿Qué mejorarías?</h2>
+          <p class="muted">Tus sugerencias se guardan en este navegador. No se envían automáticamente.</p>
+          <form id="suggestionForm">
+            <label for="suggestionCategory">Sobre qué</label><select id="suggestionCategory"><option value="routes">Rutas</option><option value="weather">Previsión</option><option value="interface">Interfaz</option><option value="other">Otra idea</option></select>
+            <label for="suggestionText">Tu sugerencia</label><textarea id="suggestionText" rows="4" maxlength="2000" required placeholder="Me gustaría poder…"></textarea>
+            <button type="submit" class="primary-button"><i data-lucide="plus"></i>Guardar sugerencia</button>
+            <p id="suggestionStatus" class="muted" role="status" aria-live="polite"></p>
+          </form>
+          <div class="section-heading"><h3>Mis sugerencias</h3><button type="button" id="exportSuggestions" class="icon-button" aria-label="Exportar sugerencias" title="Exportar sugerencias"><i data-lucide="download"></i></button></div>
+          <div id="suggestionList"></div>
+        </section>
+      </div>
     </section>
   </main>
   <template id="segmentTemplate">
