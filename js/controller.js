@@ -1,10 +1,10 @@
 // Controlador: coordina el modelo, la vista y las operaciones asíncronas.
 import { bearing, parseRouteFile, pathDistance, readSavedRoutes, routeAcross,
-  generateRoundTrip,
+  generateRoundTrip, readSuggestions, saveSuggestion,
   sampleRoute, snapToRoad, setDefaultDeparture, state, weatherFor, writeSavedRoutes } from "./model.js";
 import { dom, downloadGpx, drawRoute, fitRoute, initIcons, initPlanMap, initTheme,
   createGpxFile, canShareGpx, shareGpx, downloadGpxFile,
-  centerPlanLocation,
+  centerPlanLocation, renderSuggestions, exportSuggestions,
   renderSavedRoutes, renderSummary, renderTimeline, renderWaypoints, renderImportedWaypoints, setPlanRoutePreview,
   setWindow, showStatus, toggleTheme, togglePlanFullscreen, updateSamplesRange } from "./view.js";
 
@@ -221,6 +221,34 @@ function clearRoute() {
 }
 
 function bindEvents() {
+  const focusSection = (id, focusId) => {
+    document.getElementById(id).scrollIntoView?.({block:"start",behavior:"smooth"});
+    document.getElementById(focusId || id).focus({preventScroll:true});
+  };
+  document.querySelector("#quickGenerate").addEventListener("click", () => {
+    document.querySelector("#automaticOptions").open = true;
+    focusSection("automaticOptions","targetDistance");
+  });
+  document.querySelector("#quickDraw").addEventListener("click", () => {
+    document.querySelector("#automaticOptions").open = false;
+    dom.planMapEl.setAttribute("tabindex","0"); focusSection("planMap");
+    showStatus("Marca los puntos del recorrido en el mapa.");
+  });
+  for (const id of ["quickImport","libraryImport"]) document.getElementById(id).addEventListener("click", () => dom.routeFile.click());
+  document.querySelector("#librarySave").addEventListener("click", () => focusSection("saveCurrentSection","saveName"));
+  const suggestionStatus = document.querySelector("#suggestionStatus");
+  try { renderSuggestions(readSuggestions()); } catch { suggestionStatus.textContent = "No se pueden leer las sugerencias. Los datos se han conservado."; document.querySelector("#exportSuggestions").disabled = true; }
+  document.querySelector("#suggestionForm").addEventListener("submit", event => {
+    event.preventDefault();
+    try {
+      renderSuggestions(saveSuggestion(document.querySelector("#suggestionText").value, document.querySelector("#suggestionCategory").value));
+      event.target.reset(); suggestionStatus.textContent = "Guardada en este navegador. No se ha enviado.";
+    } catch (error) { suggestionStatus.textContent = error.message; }
+  });
+  document.querySelector("#exportSuggestions").addEventListener("click", () => {
+    try { const entries = readSuggestions(); if (entries.length) exportSuggestions(entries); }
+    catch { suggestionStatus.textContent = "No se pudieron exportar las sugerencias."; }
+  });
   const saveGenerated = () => {
     if (generationController || document.querySelector("#generatedRouteSave").hidden) return;
     dom.saveName.value = document.querySelector("#generatedRouteName").value.trim() || routeName();

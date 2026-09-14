@@ -1,5 +1,5 @@
 // Vista: DOM, mapas e interacción visual. El controlador coordina los datos.
-import { buildGpx, metricValue, pathDistance, riskFor, routeSlice, weatherLabels, windCompass } from "./model.js";
+import { buildGpx, metricValue, pathDistance, riskFor, routeSlice, weatherLabels, windCompass, suggestionCategories } from "./model.js";
 
 const ids = ["timeline", "samples", "samplesOut", "summaryCards", "planMapWrap", "planFullscreenBtn",
   "waypointList", "waypointCount", "undoWaypoint", "clearWaypoints", "routeFile", "importStatus",
@@ -136,7 +136,27 @@ export function updateSamplesRange() {
   dom.samplesOut.value = dom.samples.value;
 }
 
-const pages = { plan: ["Planifica tu salida", "PLANIFICADOR"], library: ["Tus rutas, a mano", "COLECCIÓN"], forecast: ["Previsión de tu ruta", "PREVISIÓN"] };
+const pages = { plan: ["Prepara tu próxima salida", "PLANIFICADOR"], library: ["Mis rutas", "COLECCIÓN"], forecast: ["El tiempo en tu recorrido", "PREVISIÓN"], updates: ["Novedades y sugerencias", "RIDECAST"] };
+
+export function renderSuggestions(entries) {
+  const list = document.querySelector("#suggestionList");
+  list.replaceChildren();
+  document.querySelector("#exportSuggestions").disabled = !entries.length;
+  if (!entries.length) { const empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "Todavía no tienes sugerencias guardadas."; list.append(empty); }
+  for (const entry of entries) {
+    const article = document.createElement("article"); article.className = "suggestion-item";
+    const category = document.createElement("strong"); category.textContent = suggestionCategories[entry.category];
+    const text = document.createElement("p"); text.textContent = entry.text;
+    article.append(category,text); list.append(article);
+  }
+}
+
+export function exportSuggestions(entries) {
+  const text = entries.map(item => `${suggestionCategories[item.category]}\n${item.text}`).join("\n\n");
+  const url = URL.createObjectURL(new Blob([text],{type:"text/plain;charset=utf-8"}));
+  const link = document.createElement("a"); link.href = url; link.download = "ridecast-sugerencias.txt";
+  document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url),1000);
+}
 export function setWindow(name) {
   if (!pages[name]) name = "plan";
   const changed = document.body.dataset.activeWindow !== name;
