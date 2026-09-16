@@ -52,6 +52,8 @@
     "@capacitor/android": "^8.3.2",
     "@capacitor/cli": "^8.3.2",
     "@capacitor/core": "^8.3.2",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "jsdom": "26.1.0"

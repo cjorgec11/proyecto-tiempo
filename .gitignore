@@ -1,5 +1,9 @@
 # Dependencias
 node_modules/
+.env
+.env.*
+!.env.example
+.data/
 
 # Salidas de build
 dist-electron/

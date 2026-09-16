@@ -401,13 +401,26 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 .sidebar { background: var(--paper); }
 .brand-icon { background: var(--accent-soft); border-radius: 8px; width: 44px; height: 44px; }
 .brand-icon svg { width: 26px; height: 26px; }
-.route-entry { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; max-width: 620px; margin-bottom: 24px; }
-.route-entry .secondary-button { background: var(--panel); border-color: transparent; min-height: 52px; }
+.route-entry { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; max-width: 620px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+.route-entry .secondary-button { background: transparent; border: 0; border-bottom: 3px solid transparent; border-radius: 0; min-height: 52px; }
+.route-entry .secondary-button:focus-visible { outline-offset: -3px; }
 .route-entry .secondary-button:hover { border-color: var(--accent); background: var(--accent-soft); }
 .route-entry svg { color: var(--accent); }
 .step-marker { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 14px; flex: none; }
 .section-heading h2 { display: flex; align-items: center; gap: 10px; }
-.generator-disclosure { border-bottom: 1px solid var(--line); margin-bottom: 26px; padding-bottom: 20px; }
+.planner-layout { grid-template-columns: minmax(0,1fr) 310px; gap: 28px; }
+.route-builder { grid-column: 1/-1; min-width: 0; width: 100%; padding: 18px 0 22px; border-block: 1px solid var(--line); }
+.generator-disclosure { margin: 0; padding: 0; }
+.generator-disclosure .generator-section { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(170px,.8fr); gap: 0 18px; align-items: end; }
+.generator-disclosure .surface-field,.generator-disclosure .generator-actions { margin-top: 0; }
+.generator-disclosure .surface-explanation,.generator-disclosure #generatorResult { grid-column: 1/-1; }
+.generator-disclosure .surface-explanation { margin-top: 8px; }
+.ride-settings { padding: 0 0 0 28px; }
+.ride-settings .section-heading { margin-bottom: 22px; }
+.plan-actions { grid-template-columns: 1fr; }
+.route-heading { min-height: 28px; }
+.section-heading h2,.generator-disclosure>summary { overflow-wrap: anywhere; }
+.map-credit { display: block; }
 .generator-disclosure>summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-weight: 650; list-style: none; }
 .generator-disclosure>summary>span { display: flex; align-items: center; gap: 10px; }
 .generator-disclosure>summary svg:first-child { color: var(--accent); }
@@ -433,8 +446,38 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 .suggestion-item { padding: 16px 0; border-top: 1px solid var(--line); }
 .suggestion-item strong { color: var(--accent); font-size: 14px; }
 .suggestion-item p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+.feedback-history { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.feedback-history>summary { min-height: 48px; font-weight: 650; color: var(--accent); }
+.feedback-history .suggestion-item label { margin-top: 14px; }
+.feedback-history .suggestion-item button,.feedback-history>button { margin-top: 12px; }
+.admin-app { max-width: 980px; margin: 0 auto; padding: 28px 20px; }
+.admin-app .topbar { flex-wrap: wrap; }
+.admin-app h1 { font-size: 24px; }
+.admin-login { display: grid; gap: 16px; max-width: 400px; padding-block: 28px; }
+.admin-login label { margin: 0; }
+#adminPanel { padding-top: 24px; }
+#adminEntries label { max-width: 260px; margin-top: 18px; }
+.route-history-consent { padding: 12px 0 20px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.route-history-consent label { display: flex; align-items: start; gap: 10px; }
+.route-history-consent input[type="checkbox"] { appearance: auto; width: 20px; height: 20px; min-height: 20px; flex: none; accent-color: var(--accent); }
+.admin-route-dialog { width: min(900px,calc(100% - 24px)); max-height: 90svh; overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); }
+.admin-route-dialog::backdrop { background: #0008; }
+#adminRouteMap { height: 320px; margin-block: 16px; }
+#adminRouteMeta,#adminRoutesList p { overflow-wrap: anywhere; }
+.route-data-table { overflow-x: auto; }
+.route-data-table table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.route-data-table th,.route-data-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.vote-button { margin-top: 14px; }
+.vote-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+#communityEntries { margin-bottom: 28px; }
 @media (min-width: 861px) {
   .planner-map-section { position: sticky; top: 20px; align-self: start; }
+}
+@media (min-width: 861px) and (max-width: 1150px) {
+  .planner-layout { grid-template-columns: minmax(0,1fr) 270px; gap: 24px; }
+  .generator-disclosure .generator-section { grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); }
+  .generator-disclosure .generator-actions { grid-column: 1/-1; margin-top: 16px; }
+  .ride-settings { padding-left: 24px; }
 }
 @media (max-width: 860px) {
   .topbar { gap: 14px; padding-bottom: 18px; margin-bottom: 18px; }
@@ -444,13 +487,27 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
   .updates-layout { grid-template-columns: minmax(0,1fr); gap: 32px; }
   .suggestion-section { padding: 0; border: 0; }
   .release-item { padding: 20px 0; }
+  .planner-layout { display: flex; flex-direction: column; gap: 28px; }
+  .planner-map-section,.ride-settings { width: 100%; }
+  .ride-settings { padding: 24px 0 0; border: 0; border-top: 1px solid var(--line); }
+  .generator-disclosure .generator-section { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 0 16px; }
+  .generator-disclosure .generator-actions { grid-column: 1/-1; margin-top: 16px; }
+  .departure-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .speed-field { margin: 0; }
+  .plan-actions { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 620px) {
-  .route-entry { gap: 8px; margin-bottom: 20px; }
-  .route-entry .secondary-button { flex-direction: column; gap: 5px; padding: 10px 6px; font-size: 14px; }
+  .route-entry { gap: 0; margin-bottom: 0; }
+  .route-entry .secondary-button { flex-direction: row; gap: 7px; padding: 10px 6px; font-size: 14px; }
   .route-heading h2 { font-size: 17px; font-weight: 650; }
   #planMap { height: clamp(260px,36svh,350px); }
   .planner-layout { gap: 18px; }
-  .generator-disclosure { padding-top: 4px; }
+  .route-builder { border-top: 0; padding-top: 10px; padding-bottom: 16px; }
+  .generator-disclosure .generator-section { grid-template-columns: minmax(0,1fr); padding-top: 10px; }
+  .generator-disclosure .surface-field { margin-top: 14px; }
+  .generator-disclosure>summary { font-size: 17px; }
+  .departure-fields { grid-template-columns: minmax(0,1fr); }
+  .plan-actions { grid-template-columns: minmax(0,1fr); }
+  .map-credit { font-size: 11px; }
   .library-shortcuts .secondary-button { flex: 1; }
 }
