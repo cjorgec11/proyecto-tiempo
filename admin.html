@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
+  <title>RideCast | Administración</title><link rel="stylesheet" href="./workspace.css"><link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
+</head>
+<body>
+  <main class="admin-app">
+    <header class="topbar"><h1>RideCast · Administración</h1><a class="secondary-button" href="./#updates">Volver a la app</a></header>
+    <p id="adminStatus" class="muted" role="status" aria-live="polite"></p>
+    <form id="adminLogin" class="admin-login">
+      <h2>Acceso privado</h2>
+      <label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" autocomplete="current-password" maxlength="256" required>
+      <button type="submit" class="primary-button"><i data-lucide="lock-keyhole"></i>Entrar</button>
+    </form>
+    <section id="adminPanel" hidden>
+      <div class="section-heading"><h2>Sugerencias</h2><div class="inline-actions">
+        <button id="adminRefresh" class="icon-button" type="button" title="Actualizar" aria-label="Actualizar"><i data-lucide="refresh-cw"></i></button>
+        <button id="adminLogout" class="secondary-button" type="button"><i data-lucide="log-out"></i>Cerrar sesión</button>
+      </div></div>
+      <div id="adminEntries"></div>
+      <button id="adminMore" class="secondary-button" type="button" hidden>Ver más</button>
+      <details id="adminRouteHistory" class="feedback-history">
+        <summary>Rutas planificadas y previsiones</summary>
+        <button id="adminRoutesRefresh" class="secondary-button" type="button"><i data-lucide="refresh-cw"></i>Actualizar rutas</button>
+        <p id="adminRoutesStatus" class="muted" role="status"></p>
+        <div id="adminRoutesList"></div>
+        <button id="adminRoutesMore" class="secondary-button" type="button" hidden>Ver más rutas</button>
+      </details>
+    </section>
+  </main>
+  <dialog id="adminRouteDetail" class="admin-route-dialog" aria-labelledby="adminRouteTitle">
+    <div class="section-heading"><h2 id="adminRouteTitle">Ruta</h2><button id="adminRouteClose" type="button" class="icon-button" aria-label="Cerrar ruta" title="Cerrar ruta"><i data-lucide="x"></i></button></div>
+    <p id="adminRouteMeta" class="muted"></p><div id="adminRouteMap" aria-label="Trazado de la ruta"></div><div id="adminRouteWeather" class="route-data-table"></div>
+  </dialog>
+  <script src="./vendor/leaflet/leaflet.js"></script><script src="./vendor/lucide.js"></script><script type="module" src="./js/admin.js"></script>
+</body>
+</html>

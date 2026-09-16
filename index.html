@@ -34,12 +34,30 @@
     <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden><span id="statusSymbol" aria-hidden="true"></span><span id="statusMessage"></span><button id="dismissStatus" type="button" class="icon-button" title="Cerrar aviso" aria-label="Cerrar aviso"><i data-lucide="x"></i></button></div>
 
     <section class="window active" data-window-panel="plan" aria-label="Planificador">
+      <section class="route-history-consent">
+        <label><input id="routeHistoryConsent" type="checkbox"> Guardar automáticamente mis nuevas rutas y previsiones en RideCast</label>
+        <p class="muted">El administrador podrá consultar y eliminar el trazado, las ubicaciones y los datos de tu salida. Puedes desactivar el guardado cuando quieras.</p>
+        <p id="routeHistoryStatus" class="muted" role="status" aria-live="polite"></p>
+        <button id="retryRouteHistory" type="button" class="secondary-button" hidden><i data-lucide="refresh-cw"></i>Reintentar guardado</button>
+      </section>
       <div class="route-entry" role="group" aria-label="Crear recorrido">
         <button type="button" class="secondary-button" id="quickGenerate"><i data-lucide="wand-sparkles"></i><span>Generar</span></button>
         <button type="button" class="secondary-button" id="quickDraw"><i data-lucide="map-pin-plus"></i><span>Dibujar</span></button>
         <button type="button" class="secondary-button" id="quickImport"><i data-lucide="upload"></i><span>Importar</span></button>
       </div>
       <div class="planner-layout">
+        <div class="route-builder">
+          <details class="generator-disclosure" id="automaticOptions" open>
+          <summary><span><i data-lucide="wand-sparkles"></i>Generar un circuito</span><i data-lucide="chevron-down"></i></summary>
+          <form id="generatorForm" class="generator-section">
+            <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option><option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
+            <div class="surface-field"><label for="routeSurface">Firme preferido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Caminos de tierra (MTB)</option></select></div>
+            <div class="generator-actions"><button id="generateRoute" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
+            <details class="surface-explanation"><summary>Criterios del firme</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava y hasta 25 % pavimentado para enlaces. Asfalto: solo carretera pavimentada, sin caminos ni senderos, según los datos del mapa. Los tramos sin datos se rechazan en modo asfalto.</p></details>
+            <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
+          </form>
+          </details>
+        </div>
         <section class="planner-map-section">
           <div class="section-heading route-heading"><h2><span class="step-marker">1</span>Tu recorrido</h2><span id="routeSource" class="source-label">Sin ruta</span></div>
           <div id="planMapWrap" class="plan-map-wrap">
@@ -54,16 +72,6 @@
           <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM / BRouter</p>
         </section>
         <aside class="ride-settings">
-          <details class="generator-disclosure" id="automaticOptions" open>
-          <summary><span><i data-lucide="wand-sparkles"></i>Generar un circuito</span><i data-lucide="chevron-down"></i></summary>
-          <form id="generatorForm" class="generator-section">
-            <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
-            <div class="surface-field"><label for="routeSurface">Firme preferido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Caminos de tierra (MTB)</option></select></div>
-            <div class="generator-actions"><button id="generateRoute" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
-            <details class="surface-explanation"><summary>Criterios del firme</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava y hasta 25 % pavimentado para enlaces. Asfalto: solo carretera pavimentada, sin caminos ni senderos, según los datos del mapa. Los tramos sin datos se rechazan en modo asfalto.</p></details>
-            <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
-          </form>
-          </details>
           <section id="generatedRouteSave" class="generated-route-save" hidden aria-label="Guardar ruta generada">
             <label for="generatedRouteName">Nombre de la ruta</label>
             <input id="generatedRouteName" type="text" maxlength="100" placeholder="Mi ruta circular">
@@ -163,15 +171,29 @@
         </section>
         <section class="suggestion-section">
           <h2>¿Qué mejorarías?</h2>
-          <p class="muted">Tus sugerencias se guardan en este navegador. No se envían automáticamente.</p>
+          <p class="muted">Las sugerencias que publiques serán visibles para la comunidad y podrán recibir votos. No incluyas datos personales. También puedes guardarlas solo en este navegador.</p>
           <form id="suggestionForm">
             <label for="suggestionCategory">Sobre qué</label><select id="suggestionCategory"><option value="routes">Rutas</option><option value="weather">Previsión</option><option value="interface">Interfaz</option><option value="other">Otra idea</option></select>
             <label for="suggestionText">Tu sugerencia</label><textarea id="suggestionText" rows="4" maxlength="2000" required placeholder="Me gustaría poder…"></textarea>
-            <button type="submit" class="primary-button"><i data-lucide="plus"></i>Guardar sugerencia</button>
+            <button type="button" id="sendSuggestion" class="primary-button" disabled><i data-lucide="send"></i>Publicar sugerencia</button>
+            <button type="submit" class="secondary-button"><i data-lucide="plus"></i>Guardar sugerencia</button>
             <p id="suggestionStatus" class="muted" role="status" aria-live="polite"></p>
+            <p id="feedbackStatus" class="muted" role="status" aria-live="polite"></p>
+            <a id="feedbackSignIn" href="/signin-with-chatgpt?return_to=%2F%23updates" target="_top" hidden>Iniciar sesión con ChatGPT</a>
           </form>
+          <section class="feedback-history">
+            <div class="section-heading"><h3>Sugerencias de la comunidad</h3><button type="button" id="refreshCommunity" class="icon-button" title="Actualizar sugerencias" aria-label="Actualizar sugerencias"><i data-lucide="refresh-cw"></i></button></div>
+            <p id="communityStatus" class="muted" role="status" aria-live="polite"></p>
+            <div id="communityEntries"></div>
+            <button type="button" id="moreCommunity" class="secondary-button" hidden>Ver más</button>
+          </section>
           <div class="section-heading"><h3>Mis sugerencias</h3><button type="button" id="exportSuggestions" class="icon-button" aria-label="Exportar sugerencias" title="Exportar sugerencias"><i data-lucide="download"></i></button></div>
           <div id="suggestionList"></div>
+          <section class="feedback-history">
+            <div class="section-heading"><h3>Enviadas a RideCast</h3><button type="button" id="refreshFeedback" class="icon-button" title="Actualizar envíos" aria-label="Actualizar envíos"><i data-lucide="refresh-cw"></i></button></div>
+            <div id="sentFeedback"></div>
+            <button type="button" id="moreFeedback" class="secondary-button" hidden>Ver más</button>
+          </section>
         </section>
       </div>
     </section>

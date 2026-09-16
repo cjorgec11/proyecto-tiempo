@@ -27,6 +27,18 @@ const generatedResponse = () => ({ok:true,json:async()=>({type:'FeatureCollectio
 initApp();
 after(()=>page.window.close());
 
+test("planificador: orden de lectura y cinco orientaciones seleccionables", () => {
+  const layout = document.querySelector(".planner-layout");
+  assert.deepEqual([...layout.children].map(element => element.className),
+    ["route-builder", "planner-map-section", "ride-settings"]);
+  const direction = document.querySelector("#routeDirection");
+  assert.deepEqual([...direction.options].map(option => [option.value, option.textContent]),
+    [["auto", "Cualquiera"], ["0", "Norte"], ["90", "Este"], ["180", "Sur"], ["270", "Oeste"]]);
+  direction.value = "0";
+  assert.equal(direction.selectedOptions[0].textContent, "Norte");
+  direction.value = "auto";
+});
+
 test("generador: crea una ruta guardable y cancelación no sustituye la ruta anterior", async () => {
   assert.equal(document.querySelectorAll('a[href*="strava"]').length,0);
   const originalFetch = globalThis.fetch;

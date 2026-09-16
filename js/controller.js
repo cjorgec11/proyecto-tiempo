@@ -1,4 +1,5 @@
 // Controlador: coordina el modelo, la vista y las operaciones asíncronas.
+import { recordRoute } from "./route-history.js";
 import { bearing, parseRouteFile, pathDistance, readSavedRoutes, routeAcross,
   generateRoundTrip, readSuggestions, saveSuggestion,
   sampleRoute, snapToRoad, setDefaultDeparture, state, weatherFor, writeSavedRoutes } from "./model.js";
@@ -184,6 +185,7 @@ function schedulePreview() {
       if (token !== previewToken) return;
       setPlanRoutePreview(route.coords);
       dom.routeSource.textContent = `${route.distance.toFixed(1)} km · Bicicleta`;
+      recordRoute("planned", route.coords, route.distance, "Ruta dibujada");
     } catch (error) {
       if (token === previewToken) showStatus(error.message, "error");
     }
@@ -394,6 +396,7 @@ function useImportedRoute(route, id = null) {
   renderForecast();
   setWindow("plan");
   setPlanRoutePreview(route.coords, true);
+  recordRoute("planned", route.coords, state.currentDistance, route.name);
 }
 
 async function handleRouteFile(event) {
@@ -511,6 +514,7 @@ async function exportPlanRoute() {
     state.currentRouteCoords = route.coords;
     state.currentDistance = route.distance;
     downloadGpx(routeName(), route.coords);
+    recordRoute("planned", route.coords, route.distance, routeName());
     showStatus("GPX exportado.");
   } catch (error) {
     if (token === previewToken) showStatus(error.message, "error");
@@ -543,10 +547,12 @@ async function calculate(event) {
     renderForecast();
     if (!imported) setPlanRoutePreview(route.coords);
     const samples = sampleRoute(route.coords, count);
+    recordRoute("planned", route.coords, route.distance, imported?.name || "Ruta planificada", [], { departure: departure.toISOString(), speed });
     showStatus("Consultando el tiempo a la hora de paso por cada punto…");
     const segments = await weatherFor(samples, departure, route.distance, speed);
     if (token !== calculationToken) return;
     state.currentSegments = segments;
+    recordRoute("forecast", route.coords, route.distance, imported?.name || "Previsión de ruta", segments, { departure: departure.toISOString(), speed });
     state.currentRideBearing = bearing(route.coords[0], route.coords.at(-1));
     renderSummary(route.distance, state.currentDuration, segments, state.currentRideBearing);
     setWindow("forecast");
