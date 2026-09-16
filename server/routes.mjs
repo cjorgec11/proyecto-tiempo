@@ -1,4 +1,5 @@
 import { isAdmin, readJson } from "./admin-auth.mjs";
+import { userId } from "./security.mjs";
 const json = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const error = (message, status) => json({ error: message }, status);
 const validPoint = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180;
@@ -25,7 +26,7 @@ export async function handleRoutes(request, env) {
   if (request.method !== "GET" && request.headers.get("origin") !== url.origin) return error("Origen no permitido.", 403);
   try {
     if (admin && !await isAdmin(request, env)) return error("Inicia sesión como administrador.", 401);
-    const user = request.headers.get("oai-authenticated-user-id");
+    const user = userId(request, env);
     if (!admin && !user) return error("Inicia sesión con ChatGPT para guardar el historial.", 401);
     if (!env.DB) return error("El historial no está disponible.", 503);
     if (admin && request.method === "GET") {

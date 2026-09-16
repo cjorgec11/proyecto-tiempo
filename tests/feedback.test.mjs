@@ -9,7 +9,7 @@ import { handleFeedback } from "../server/feedback.mjs";
 import { handleAdminAuth, passwordHash } from "../server/admin-auth.mjs";
 
 const DB = openDatabase(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
-const env = { DB, ADMIN_PASSWORD_HASH: await passwordHash("test-only-random-password-123") };
+const env = { DB, AUTH_MODE: "sites", ADMIN_PASSWORD_HASH: await passwordHash("test-only-random-password-123") };
 const login = await handleAdminAuth(new Request("https://ridecast.test/api/admin/login", { method: "POST", headers: { origin: "https://ridecast.test", "content-type": "application/json" }, body: JSON.stringify({ password: "test-only-random-password-123" }) }), env);
 const adminCookie = login.headers.get("set-cookie").split(";")[0];
 after(() => DB.close());
@@ -24,7 +24,7 @@ test("buzón: autenticación, autorización y origen se comprueban en servidor",
   assert.equal((await handleFeedback(request("", null), env)).status, 401);
   assert.equal((await handleFeedback(request("/admin"), env)).status, 401);
   assert.equal((await handleFeedback(request("", "alice", suggestion(), "https://other.test"), env)).status, 403);
-  assert.equal((await handleFeedback(request("", "alice", suggestion()), {})).status, 503);
+  assert.equal((await handleFeedback(request("", "alice", suggestion()), { AUTH_MODE: "sites" })).status, 503);
   assert.equal((await (await handleFeedback(request("/session", "owner"), env)).json()).admin, undefined);
   assert.equal((await (await handleFeedback(request("/session", "alice"), env)).json()).admin, undefined);
 });
@@ -97,9 +97,9 @@ test("buzón: conserva envíos al reabrir la base de datos", async () => {
   let database = openDatabase(file, migrations);
   try {
     const data = suggestion("Persistencia verificada");
-    assert.equal((await handleFeedback(request("", "persist", data), { DB: database })).status, 201);
+    assert.equal((await handleFeedback(request("", "persist", data), { DB: database, AUTH_MODE: "sites" })).status, 201);
     database.close(); database = openDatabase(file, migrations);
-    const response = await (await handleFeedback(request("", "persist"), { DB: database })).json();
+    const response = await (await handleFeedback(request("", "persist"), { DB: database, AUTH_MODE: "sites" })).json();
     assert.equal(response.entries[0].id, data.id);
   } finally { database.close(); rmSync(file); rmdirSync(directory); }
 });

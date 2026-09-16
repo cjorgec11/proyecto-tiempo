@@ -56,7 +56,10 @@ export async function handleAdminAuth(request, env) {
     if (url.pathname !== "/api/admin/login" || request.method !== "POST") return json({ error: "No encontrado." }, 404);
     if (!configured(env) || !env.DB) return json({ error: "El acceso de administración aún no está configurado." }, 503);
     const now = Date.now();
-    const key = await digest(`${env.ADMIN_PASSWORD_HASH}:${request.headers.get("cf-connecting-ip") || "local"}`);
+    // Only a trusted adapter may supply CLIENT_IP. Raw deployments share a
+    // conservative bucket rather than trusting an attacker-controlled header.
+    const ip = env.CLIENT_IP || (env.AUTH_MODE === "sites" ? request.headers.get("cf-connecting-ip") : null) || "unknown";
+    const key = await digest(`${env.ADMIN_PASSWORD_HASH}:${ip}`);
     const attempt = await env.DB.prepare(`INSERT INTO admin_attempts (key, attempts, expires) VALUES (?, 1, ?)
       ON CONFLICT(key) DO UPDATE SET attempts = CASE WHEN expires <= ? THEN 1 ELSE attempts + 1 END,
       expires = CASE WHEN expires <= ? THEN excluded.expires ELSE expires END

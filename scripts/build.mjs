@@ -15,6 +15,7 @@ await cp(join(root, "server/worker.mjs"), join(output, "server/index.js"));
 await cp(join(root, "server/feedback.mjs"), join(output, "server/feedback.mjs"));
 await cp(join(root, "server/admin-auth.mjs"), join(output, "server/admin-auth.mjs"));
 await cp(join(root, "server/routes.mjs"), join(output, "server/routes.mjs"));
+await cp(join(root, "server/security.mjs"), join(output, "server/security.mjs"));
 await mkdir(join(output, ".openai"), { recursive: true });
 await cp(join(root, ".openai/hosting.json"), join(output, ".openai/hosting.json"));
 await cp(join(root, "drizzle"), join(output, ".openai/drizzle"), { recursive: true });

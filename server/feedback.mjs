@@ -1,4 +1,5 @@
 import { isAdmin, readJson as body } from "./admin-auth.mjs";
+import { userId } from "./security.mjs";
 const categories = new Set(["routes", "weather", "interface", "other"]);
 const statuses = new Set(["new", "reviewed", "resolved"]);
 const json = (data, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -6,7 +7,7 @@ const fail = (message, status) => json({ error: message }, status);
 
 export async function handleFeedback(request, env) {
   const url = new URL(request.url);
-  const user = { id: request.headers.get("oai-authenticated-user-id") };
+  const user = { id: userId(request, env) };
   if (request.method !== "GET" && request.headers.get("origin") !== url.origin) return fail("Origen no permitido.", 403);
   if (url.pathname === "/api/feedback/session" && request.method === "GET") {
     return json({ signedIn: Boolean(user.id), available: Boolean(env.DB) });
