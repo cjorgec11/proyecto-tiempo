@@ -7,7 +7,7 @@ import { handleAdminAuth, passwordHash } from "../server/admin-auth.mjs";
 
 test("historial: consentimiento, rutas completas, previsión, acceso privado y eliminación", async () => {
   const DB = openDatabase(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
-  const env = { DB, ADMIN_PASSWORD_HASH: await passwordHash("isolated-admin-test-123456") };
+  const env = { DB, AUTH_MODE: "sites", ADMIN_PASSWORD_HASH: await passwordHash("isolated-admin-test-123456") };
   const origin = "https://ridecast.test";
   const request = (path, data, user = "alice", cookie = "") => new Request(origin + path, { method: data ? "POST" : "GET",
     headers: { origin, "content-type": "application/json", ...(user ? { "oai-authenticated-user-id": user } : {}), cookie },

@@ -3,6 +3,8 @@ import { handleAdminAuth } from "./admin-auth.mjs";
 import { handleRoutes } from "./routes.mjs";
 export default {
   async fetch(request, env) {
+    // Local preview context must never be enabled by a hosted Worker.
+    env = { ...env, PREVIEW_USER_ID: null, CLIENT_IP: null };
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/routes")) return handleRoutes(request, env);
     if (path.startsWith("/api/admin/")) return handleAdminAuth(request, env);

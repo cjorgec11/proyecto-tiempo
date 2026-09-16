@@ -16,11 +16,12 @@ El acceso esta limitado a diez intentos cada quince minutos por direccion de ori
 
 `node scripts/setup-admin.mjs` genera una contraseña aleatoria de 192 bits solo si no existe configuracion. Guarda la contraseña para el propietario en `.data/admin-access.txt` y su hash PBKDF2-SHA256 con sal aleatoria en `.data/admin.env`. Ambos archivos estan excluidos de Git y de los archivos servidos.
 No se imprime la contraseña en los registros. El script no sobrescribe una contraseña existente.
-`node server.mjs` lee el hash y usa SQLite en `.data/feedback.sqlite`. Simula una identidad normal para las funciones comunitarias, pero nunca concede acceso administrativo sin contraseña.
+`node server.mjs` lee el hash y usa SQLite en `.data/feedback.sqlite`. Por defecto no simula ninguna identidad. Para pruebas locales se puede activar `LOCAL_PREVIEW_AUTH=true`, sin origen público ni modo producción. Nunca concede acceso administrativo sin contraseña. Consultar `DEPLOYMENT.md` antes de exponer el servidor fuera del equipo.
 
 ## Publicacion
 
 Antes de publicar en Sites, configurar `ADMIN_PASSWORD_HASH` como valor privado del servidor utilizando el valor de `.data/admin.env`. No incluir la contraseña ni su hash en archivos publicos o en Git.
+Configurar también `AUTH_MODE=sites` únicamente si el dispatcher de Sites es la única entrada y controla las cabeceras de identidad. Sin esa opción, las funciones personales se deniegan por defecto. El servidor Node independiente no admite ese modo.
 El build incluye Worker, recursos publicos y migraciones D1. La migracion 0002 elimina el estado de los antiguos avisos por correo y agrega sesiones y limites de acceso. No modifica los textos ni los votos.
 Se conserva la audiencia del Site; esta pagina no lo convierte en publico. Si el Site exige iniciar sesion con ChatGPT, ese control sigue siendo necesario ademas de la contraseña administrativa.
 La base SQLite local no se copia a produccion. Estos cambios aun no estan publicados.
