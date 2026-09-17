@@ -1,31 +1,9 @@
+import { account } from "./accounts.mjs";
+import { digest, unhex, hex, passwordHash } from "./crypto.mjs";
+import { readJson } from "./http.mjs";
 const cookieName = "ridecast_admin";
 const encoder = new TextEncoder();
-const hex = bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, "0")).join("");
-const unhex = value => Uint8Array.from(value.match(/../g) || [], byte => Number.parseInt(byte, 16));
-const digest = async text => hex(await crypto.subtle.digest("SHA-256", encoder.encode(text)));
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
-
-export async function readJson(request, limit = 12000) {
-  if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("Formato no válido.");
-  const reader = request.body?.getReader();
-  if (!reader) throw new Error("Faltan datos.");
-  const parts = []; let size = 0;
-  while (true) {
-    const { value, done } = await reader.read(); if (done) break;
-    size += value.length;
-    if (size > limit) { await reader.cancel(); throw new Error("Petición demasiado larga."); }
-    parts.push(value);
-  }
-  const bytes = new Uint8Array(size); let offset = 0;
-  for (const part of parts) { bytes.set(part, offset); offset += part.length; }
-  return JSON.parse(new TextDecoder().decode(bytes));
-}
-
-export async function passwordHash(password, salt = hex(crypto.getRandomValues(new Uint8Array(16)))) {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const hash = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: unhex(salt), iterations: 100000 }, key, 256);
-  return `pbkdf2$100000$${salt}$${hex(hash)}`;
-}
 
 function configured(env) { return /^pbkdf2\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(env.ADMIN_PASSWORD_HASH || ""); }
 function token(request) {
@@ -37,6 +15,7 @@ function cookie(request, value, age) {
 }
 
 export async function isAdmin(request, env) {
+  if ((await account(request, env))?.admin) return true;
   const value = token(request);
   if (!value || !configured(env) || !env.DB) return false;
   const row = await env.DB.prepare("SELECT expires, credential FROM admin_sessions WHERE token_hash = ?").bind(await digest(value)).first();

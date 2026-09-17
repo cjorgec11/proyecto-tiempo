@@ -10,7 +10,8 @@
     <header class="topbar"><h1>RideCast · Administración</h1><a class="secondary-button" href="./#updates">Volver a la app</a></header>
     <p id="adminStatus" class="muted" role="status" aria-live="polite"></p>
     <form id="adminLogin" class="admin-login">
-      <h2>Acceso privado</h2>
+      <h2>Acceso de emergencia</h2>
+      <p class="muted">También puedes entrar con tu cuenta de administrador desde el botón Entrar.</p>
       <label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" autocomplete="current-password" maxlength="256" required>
       <button type="submit" class="primary-button"><i data-lucide="lock-keyhole"></i>Entrar</button>
     </form>
@@ -21,6 +22,7 @@
       </div></div>
       <div id="adminEntries"></div>
       <button id="adminMore" class="secondary-button" type="button" hidden>Ver más</button>
+      <details id="adminSavedLibrary" class="feedback-history"><summary>Rutas guardadas de los usuarios</summary><button id="adminLibraryRefresh" type="button" class="secondary-button">Actualizar</button><p id="adminLibraryStatus" role="status"></p><div id="adminLibraryList"></div><button id="adminLibraryMore" type="button" class="secondary-button" hidden>Ver más</button></details>
       <details id="adminRouteHistory" class="feedback-history">
         <summary>Rutas planificadas y previsiones</summary>
         <button id="adminRoutesRefresh" class="secondary-button" type="button"><i data-lucide="refresh-cw"></i>Actualizar rutas</button>

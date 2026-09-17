@@ -1,11 +1,13 @@
 import { initAdminRoutes } from "./admin-routes.js";
+import { initAccount, accountFetch, signOutAccount } from "./account.js";
+import { initAdminLibrary } from "./admin-library.js";
 const $ = id => document.getElementById(id);
 const states = { new: "Nueva", reviewed: "Revisada", resolved: "Resuelta" };
 const categories = { routes: "Rutas", weather: "Previsión", interface: "Interfaz", other: "Otra idea" };
 let page = 0, busy = false, generation = 0;
-function locked() { generation++; $("adminPanel").hidden = true; $("adminLogin").hidden = false; $("adminEntries").replaceChildren(); routeAdmin.reset(); }
+function locked() { generation++; $("adminPanel").hidden = true; $("adminLogin").hidden = false; $("adminEntries").replaceChildren(); routeAdmin.reset(); libraryAdmin.reset(); }
 async function api(path, data) {
-  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(15000),
+  const response = await accountFetch(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(15000),
     ...(data ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) } : {}) });
   if (response.status === 401) locked();
   const result = await response.json();
@@ -36,7 +38,19 @@ async function load(more = false) {
         catch (error) { select.value = entry.status; $("adminStatus").textContent = error.message; }
         finally { select.disabled = false; }
       });
-      article.append(heading, info, text, label); $("adminEntries").append(article);
+      const edit = document.createElement("button"); edit.type = "button"; edit.className = "secondary-button"; edit.textContent = "Editar texto";
+      edit.addEventListener("click", async () => {
+        const message = prompt("Texto de la sugerencia", entry.message); if (message === null) return;
+        try { await api("/api/feedback/admin", { action: "edit", id: entry.id, message, category: entry.category }); await load(); }
+        catch (error) { $("adminStatus").textContent = error.message; }
+      });
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary-button"; remove.textContent = "Eliminar";
+      remove.addEventListener("click", async () => {
+        if (!confirm("¿Eliminar esta sugerencia y sus votos?")) return;
+        try { await api("/api/feedback/admin", { action: "delete", id: entry.id }); await load(); }
+        catch (error) { $("adminStatus").textContent = error.message; }
+      });
+      article.append(heading, info, text, label, edit, remove); $("adminEntries").append(article);
     }
     page = next; $("adminMore").hidden = !result.hasMore;
     $("adminStatus").textContent = result.entries.length || more ? "" : "No hay sugerencias.";
@@ -52,17 +66,20 @@ $("adminLogin").addEventListener("submit", async event => {
   finally { button.disabled = false; }
 });
 $("adminLogout").addEventListener("click", async () => {
-  try { await api("/api/admin/logout", {}); locked(); $("adminStatus").textContent = "Sesión cerrada."; }
+  try { await api("/api/admin/logout", {}); await signOutAccount(); locked(); $("adminStatus").textContent = "Sesión cerrada."; }
   catch (error) { $("adminStatus").textContent = error.message; }
 });
 $("adminRefresh").addEventListener("click", () => load());
 $("adminMore").addEventListener("click", () => load(true));
-window.addEventListener("pageshow", async () => {
+async function checkSession() {
   try {
     const session = await api("/api/admin/session");
     if (session.authenticated) { $("adminLogin").hidden = true; $("adminPanel").hidden = false; await load(); }
     else { locked(); if (!session.configured) $("adminStatus").textContent = "La contraseña aún no está configurada."; }
   } catch (error) { locked(); $("adminStatus").textContent = error.message; }
-});
+}
+window.addEventListener("ridecast:account", checkSession);
+window.addEventListener("pageshow", () => initAccount().then(checkSession));
 window.lucide?.createIcons();
 const routeAdmin = initAdminRoutes(api);
+const libraryAdmin = initAdminLibrary(api);

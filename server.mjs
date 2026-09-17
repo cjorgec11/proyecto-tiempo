@@ -6,6 +6,8 @@ import { openDatabase } from "./server/local-db.mjs";
 import { handleFeedback } from "./server/feedback.mjs";
 import { handleAdminAuth } from "./server/admin-auth.mjs";
 import { handleRoutes } from "./server/routes.mjs";
+import { handleAccount } from "./server/accounts.mjs";
+import { handleLibrary } from "./server/library.mjs";
 import { nodeConfiguration, securityHeaders } from "./server/security.mjs";
 
 const root = realpathSync(process.cwd());
@@ -36,7 +38,7 @@ createServer(async (request, response) => {
     url = new URL(request.url, config.origin || host.origin);
   }
   catch { response.writeHead(400); response.end(); return; }
-  if (url.pathname.startsWith("/api/feedback") || url.pathname.startsWith("/api/admin/") || url.pathname.startsWith("/api/routes")) {
+  if (/^\/api\/(feedback|admin|routes|account|library)(\/|$)/.test(url.pathname)) {
     try {
       const headers = new Headers();
       for (const [key, value] of Object.entries(request.headers)) {
@@ -44,7 +46,7 @@ createServer(async (request, response) => {
       }
       const webRequest = new Request(url, { method: request.method, headers,
         ...(["GET", "HEAD"].includes(request.method) ? {} : { body: Readable.toWeb(request), duplex: "half" }) });
-      const handler = url.pathname.startsWith("/api/routes") ? handleRoutes : url.pathname.startsWith("/api/admin/") ? handleAdminAuth : handleFeedback;
+      const handler = url.pathname.startsWith("/api/account/") ? handleAccount : url.pathname.startsWith("/api/library") ? handleLibrary : url.pathname.startsWith("/api/routes") ? handleRoutes : url.pathname.startsWith("/api/admin/") ? handleAdminAuth : handleFeedback;
       const result = await handler(webRequest, { ...process.env, DB, AUTH_MODE: "disabled",
         PREVIEW_USER_ID: config.preview ? "local-preview-owner" : null,
         CLIENT_IP: request.socket.remoteAddress || "unknown" });

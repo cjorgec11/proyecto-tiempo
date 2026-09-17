@@ -1,7 +1,8 @@
 // Controlador: coordina el modelo, la vista y las operaciones asíncronas.
 import { recordRoute } from "./route-history.js";
+import { currentAccount, accountRoutes, saveCloudRoute, deleteCloudRoute, cloudRoute, reloadAccountRoutes } from "./account.js";
 import { bearing, parseRouteFile, pathDistance, readSavedRoutes, routeAcross,
-  generateRoundTrip, readSuggestions, saveSuggestion,
+  generateRoundTrip, readSuggestions, saveSuggestion, readLocalRoutes,
   sampleRoute, snapToRoad, setDefaultDeparture, state, weatherFor, writeSavedRoutes } from "./model.js";
 import { dom, downloadGpx, drawRoute, fitRoute, initIcons, initPlanMap, initTheme,
   createGpxFile, canShareGpx, shareGpx, downloadGpxFile,
@@ -73,6 +74,12 @@ export function initApp() {
   setDefaultDeparture(dom.departure);
   bindEvents();
   renderCollection();
+  let previousAccount = null;
+  window.addEventListener("ridecast:account", () => {
+    const id = currentAccount()?.id || null;
+    if (previousAccount !== id) { activeSavedId = null; document.getElementById("newRoute").click(); previousAccount = id; }
+    renderCollection();
+  });
   renderTimeline([], 0, state.currentMode);
   renderSummary();
   initPlanMap(addWaypoint);
@@ -251,12 +258,12 @@ function bindEvents() {
     try { const entries = readSuggestions(); if (entries.length) exportSuggestions(entries); }
     catch { suggestionStatus.textContent = "No se pudieron exportar las sugerencias."; }
   });
-  const saveGenerated = () => {
+  const saveGenerated = async () => {
     if (generationController || document.querySelector("#generatedRouteSave").hidden) return;
     dom.saveName.value = document.querySelector("#generatedRouteName").value.trim() || routeName();
-    if (saveCurrentRoute()) {
+    if (await saveCurrentRoute()) {
       document.querySelector("#saveGeneratedRoute span").textContent = "Actualizar ruta";
-      document.querySelector("#generatedSaveStatus").textContent = `“${dom.saveName.value}” guardada en Mis rutas de este navegador.`;
+      document.querySelector("#generatedSaveStatus").textContent = `“${dom.saveName.value}” guardada ${accountRoutes() !== null ? "en tu cuenta" : "en este navegador"}.`;
     } else {
       document.querySelector("#generatedSaveStatus").textContent = "No se ha podido guardar la ruta. Revisa el aviso e inténtalo de nuevo.";
     }
@@ -325,6 +332,16 @@ function bindEvents() {
   dom.savedRoutes.addEventListener("click", savedAction);
   document.querySelector("#routeSearch").addEventListener("input", renderCollection);
   document.querySelector("#routeSort").addEventListener("change", renderCollection);
+  document.getElementById("refreshMyRoutes").addEventListener("click", async () => {
+    try { await reloadAccountRoutes(); renderCollection(); } catch (error) { showStatus(error.message, "error"); }
+  });
+  document.getElementById("uploadLocalRoutes").addEventListener("click", async event => {
+    if (!currentAccount() || !confirm("¿Copiar las rutas de este dispositivo a tu cuenta? El administrador podrá consultarlas.")) return;
+    event.currentTarget.disabled = true;
+    try { for (const route of readLocalRoutes()) await saveCloudRoute(route); showStatus("Rutas copiadas a tu cuenta. Los originales siguen en este dispositivo."); }
+    catch (error) { showStatus(error.message, "error"); }
+    finally { document.getElementById("uploadLocalRoutes").disabled = false; }
+  });
   document.querySelector("#themeToggle").addEventListener("click", toggleTheme);
   document.querySelector("#dismissStatus").addEventListener("click", () => showStatus(""));
   const speedInput = document.querySelector("#speed");
@@ -424,7 +441,7 @@ function routeName() {
   return state.importedRoute?.name || "Ruta " + new Date().toLocaleDateString("es-ES");
 }
 
-function saveCurrentRoute() {
+async function saveCurrentRoute() {
   if (!state.currentRouteCoords.length) return showStatus("Calcula o importa una ruta antes de guardarla.", "error");
   try {
     const routes = readSavedRoutes();
@@ -438,22 +455,24 @@ function saveCurrentRoute() {
       ...(state.importedRoute?.generation ? {generation:state.importedRoute.generation} : {}),
       createdAt: previous?.createdAt || new Date().toISOString(),
     };
-    writeSavedRoutes([saved, ...routes.filter((route) => route.id !== saved.id)]);
+    if (accountRoutes() !== null) await saveCloudRoute(saved);
+    else writeSavedRoutes([saved, ...routes.filter((route) => route.id !== saved.id)]);
     activeSavedId = saved.id;
     document.querySelector("#routeSearch").value = "";
     renderCollection();
-    showStatus(`“${saved.name}” guardada en este navegador.`);
+    showStatus(`“${saved.name}” guardada ${accountRoutes() !== null ? "en tu cuenta" : "en este navegador"}.`);
     return true;
   } catch (error) { showStatus(error.message, "error"); return false; }
 }
 
-function savedAction(event) {
+async function savedAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   try {
     const routes = readSavedRoutes();
-    const route = routes.find((item) => item.id === button.dataset.id);
+    let route = routes.find((item) => item.id === button.dataset.id);
     if (!route) return;
+    if (accountRoutes() !== null && button.dataset.action !== "delete") route = await cloudRoute(route.id);
     if (button.dataset.action === "load") {
       useImportedRoute(route, route.id);
       showStatus("Ruta cargada. Revisa la fecha y calcula una previsión actualizada.");
@@ -462,7 +481,8 @@ function savedAction(event) {
     } else if (button.dataset.action === "garmin") {
       openGarmin(route);
     } else if (button.dataset.action === "delete" && window.confirm(`¿Borrar “${route.name}” de tus rutas guardadas?`)) {
-      writeSavedRoutes(routes.filter((item) => item.id !== route.id));
+      if (accountRoutes() !== null) await deleteCloudRoute(route.id);
+      else writeSavedRoutes(routes.filter((item) => item.id !== route.id));
       if (activeSavedId === route.id) activeSavedId = null;
       renderCollection();
       showStatus("Ruta eliminada de la colección.");

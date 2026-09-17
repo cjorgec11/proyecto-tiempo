@@ -7,13 +7,17 @@
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
+    "clean": "node scripts/clean.mjs",
     "start": "node server.mjs",
     "build": "node scripts/build.mjs",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "prepare:release": "node scripts/prepare-release.mjs",
+    "setup:admin": "node scripts/setup-admin.mjs",
     "test": "node --test tests/*.test.mjs",
     "electron": "electron .",
     "build:win": "electron-builder --win --x64",
-    "cap:sync": "cap sync android",
-    "cap:build:apk": "cap sync android && cd android && gradlew.bat assembleDebug"
+    "cap:sync": "npm run build:mobile && cap sync android",
+    "cap:build:apk": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
   },
   "build": {
     "appId": "com.jorge.ridecast",
@@ -23,13 +27,12 @@
       "js/**/*",
       "app.js",
       "index.html",
-      "styles.css",
       "workspace.css",
       "vendor/**/*",
       "package.json"
     ],
     "directories": {
-      "output": "C:/Users/jorge/RideCast-Build/electron"
+      "output": "dist-electron"
     },
     "win": {
       "target": [

@@ -9,7 +9,7 @@ import { once } from "node:events";
 import { request as httpRequest } from "node:http";
 import worker from "../server/worker.mjs";
 import { openDatabase } from "../server/local-db.mjs";
-import { passwordHash } from "../server/admin-auth.mjs";
+import { passwordHash } from "../server/crypto.mjs";
 import { nodeConfiguration } from "../server/security.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));

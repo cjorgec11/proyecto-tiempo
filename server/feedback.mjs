@@ -1,5 +1,6 @@
-import { isAdmin, readJson as body } from "./admin-auth.mjs";
-import { userId } from "./security.mjs";
+import { isAdmin } from "./admin-auth.mjs";
+import { readJson as body } from "./http.mjs";
+import { account } from "./accounts.mjs";
 const categories = new Set(["routes", "weather", "interface", "other"]);
 const statuses = new Set(["new", "reviewed", "resolved"]);
 const json = (data, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -7,14 +8,16 @@ const fail = (message, status) => json({ error: message }, status);
 
 export async function handleFeedback(request, env) {
   const url = new URL(request.url);
-  const user = { id: userId(request, env) };
+  let user;
+  try { user = { id: (await account(request, env))?.id }; }
+  catch { return fail("No se puede comprobar tu sesión ahora.", 503); }
   if (request.method !== "GET" && request.headers.get("origin") !== url.origin) return fail("Origen no permitido.", 403);
   if (url.pathname === "/api/feedback/session" && request.method === "GET") {
     return json({ signedIn: Boolean(user.id), available: Boolean(env.DB) });
   }
   const communityRead = request.method === "GET" && url.pathname === "/api/feedback/community";
   const adminPath = url.pathname.startsWith("/api/feedback/admin");
-  if (!user.id && !communityRead && !adminPath) return fail("Inicia sesión con ChatGPT para enviar o votar sugerencias.", 401);
+  if (!user.id && !communityRead && !adminPath) return fail("Inicia sesión para enviar o votar sugerencias.", 401);
   if (!env.DB) return fail("El buzón aún no está disponible. Tu texto no se ha enviado.", 503);
   try {
     if (adminPath && !await isAdmin(request, env)) return fail("Inicia sesión como administrador.", 401);
@@ -73,7 +76,14 @@ export async function handleFeedback(request, env) {
       if (!data || typeof data.id !== "string") return fail("Petición no válida.", 400);
       const row = await env.DB.prepare("SELECT * FROM feedback WHERE id = ?").bind(data.id).first();
       if (!row) return fail("Sugerencia no encontrada.", 404);
-      if (statuses.has(data.status)) await env.DB.prepare("UPDATE feedback SET status = ? WHERE id = ?").bind(data.status, data.id).run();
+      if (data.action === "delete") {
+        await env.DB.prepare("DELETE FROM feedback_votes WHERE feedback_id = ?").bind(data.id).run();
+        await env.DB.prepare("DELETE FROM feedback WHERE id = ?").bind(data.id).run();
+      }
+      else if (data.action === "edit" && typeof data.message === "string" && data.message.trim() && data.message.length <= 2000 && categories.has(data.category)) {
+        await env.DB.prepare("UPDATE feedback SET message = ?, category = ? WHERE id = ?").bind(data.message.trim(), data.category, data.id).run();
+      }
+      else if (statuses.has(data.status)) await env.DB.prepare("UPDATE feedback SET status = ? WHERE id = ?").bind(data.status, data.id).run();
       else return fail("Estado no válido.", 400);
       return json({ saved: true });
     }

@@ -1,15 +1,18 @@
+import { accountFetch, openAccount, currentAccount } from "./account.js";
 const labels = { routes: "Rutas", weather: "Previsión", interface: "Interfaz", other: "Otra idea" };
 const states = { new: "Nueva", reviewed: "Revisada", resolved: "Resuelta" };
 const $ = id => document.getElementById(id);
 
 async function api(path, data) {
-  const response = await fetch(`/api/feedback${path}`, {
+  const owner = currentAccount()?.id;
+  const response = await accountFetch(`/api/feedback${path}`, {
     credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(15000),
     ...(data ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) } : {}),
   });
   let result;
   try { result = await response.json(); } catch { throw new Error("El buzón aún no está disponible en esta versión."); }
   if (!response.ok) throw new Error(result.error || "No se pudo completar la operación.");
+  if (owner !== currentAccount()?.id) throw new Error("La cuenta ha cambiado. Actualiza las sugerencias.");
   return result;
 }
 
@@ -47,7 +50,7 @@ export function initFeedback() {
         update();
         vote.addEventListener("click", async () => {
           if (!signedIn) {
-            $("communityStatus").textContent = "Inicia sesión con ChatGPT para votar.";
+            $("communityStatus").textContent = "Inicia sesión para votar.";
             $("feedbackSignIn").hidden = false; $("feedbackSignIn").focus(); return;
           }
           vote.disabled = true;
@@ -115,9 +118,18 @@ export function initFeedback() {
       await list();
       await community();
     } catch (error) { $("feedbackStatus").textContent = `${error.message} Tu texto se conserva; puedes reintentar el envío.`; }
-    finally { sending = false; $("sendSuggestion").disabled = false; }
+    finally { sending = false; $("sendSuggestion").disabled = !signedIn; }
   });
   $("refreshFeedback").addEventListener("click", session);
+  $("feedbackSignIn").addEventListener("click", openAccount);
+  let previousOwner = currentAccount()?.id;
+  window.addEventListener("ridecast:account", () => {
+    const owner = currentAccount()?.id;
+    if (previousOwner === owner) return;
+    previousOwner = owner; pending = null; signedIn = false;
+    $("sentFeedback").replaceChildren(); $("communityEntries").replaceChildren();
+    $("sendSuggestion").disabled = true; session();
+  });
   $("moreFeedback").addEventListener("click", () => list(true));
   $("refreshCommunity").addEventListener("click", () => community());
   $("moreCommunity").addEventListener("click", () => community(true));

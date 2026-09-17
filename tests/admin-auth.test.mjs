@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "../server/local-db.mjs";
-import { handleAdminAuth, isAdmin, passwordHash } from "../server/admin-auth.mjs";
+import { handleAdminAuth, isAdmin } from "../server/admin-auth.mjs";
+import { passwordHash } from "../server/crypto.mjs";
 import { handleFeedback } from "../server/feedback.mjs";
 
 test("administrador: contraseña, cookies, revocación, caducidad, CSRF y límite de intentos", async () => {

@@ -1,3 +1,4 @@
+import { accountFetch, currentAccount } from "./account.js";
 let queue = [], working = false;
 const consent = () => document.getElementById("routeHistoryConsent")?.checked === true;
 function status(text) { const element = document.getElementById("routeHistoryStatus"); if (element) element.textContent = text; }
@@ -7,7 +8,7 @@ async function flush() {
   try {
     while (queue.length && consent()) {
       const item = queue[0];
-      const response = await fetch("/api/routes", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      const response = await accountFetch("/api/routes", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(item), signal: AbortSignal.timeout(15000) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo guardar el historial.");
@@ -29,6 +30,13 @@ export function recordRoute(kind, coords, distance, name, segments = [], setting
 }
 export function initRouteHistory() {
   const input = document.getElementById("routeHistoryConsent");
+  let owner = null;
+  window.addEventListener("ridecast:account", () => {
+    const id = currentAccount()?.id || null;
+    if (owner !== id) { queue = []; input.checked = false; owner = id; }
+    input.disabled = !id;
+    if (!id) status("Inicia sesión para guardar automáticamente las rutas y previsiones en tu cuenta.");
+  });
   try { input.checked = localStorage.getItem("ridecast.routeHistoryConsent.v1") === "yes"; } catch {}
   input.addEventListener("change", () => {
     try { localStorage.setItem("ridecast.routeHistoryConsent.v1", input.checked ? "yes" : "no"); } catch {}

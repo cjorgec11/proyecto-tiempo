@@ -1,5 +1,6 @@
-import { isAdmin, readJson } from "./admin-auth.mjs";
-import { userId } from "./security.mjs";
+import { isAdmin } from "./admin-auth.mjs";
+import { readJson } from "./http.mjs";
+import { account } from "./accounts.mjs";
 const json = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const error = (message, status) => json({ error: message }, status);
 const validPoint = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180;
@@ -26,8 +27,8 @@ export async function handleRoutes(request, env) {
   if (request.method !== "GET" && request.headers.get("origin") !== url.origin) return error("Origen no permitido.", 403);
   try {
     if (admin && !await isAdmin(request, env)) return error("Inicia sesión como administrador.", 401);
-    const user = userId(request, env);
-    if (!admin && !user) return error("Inicia sesión con ChatGPT para guardar el historial.", 401);
+    const user = (await account(request, env))?.id;
+    if (!admin && !user) return error("Inicia sesión para guardar el historial.", 401);
     if (!env.DB) return error("El historial no está disponible.", 503);
     if (admin && request.method === "GET") {
       if (url.searchParams.has("id")) {
@@ -39,7 +40,16 @@ export async function handleRoutes(request, env) {
       return json({ entries: results.slice(0, 50), hasMore: results.length > 50 });
     }
     if (admin && request.method === "POST") {
-      const data = await readJson(request);
+      const data = await readJson(request, 1800000);
+      if (data?.action === "update" && typeof data.id === "string") {
+        const existing = await env.DB.prepare("SELECT * FROM route_history WHERE id = ?").bind(data.id).first();
+        if (!existing) return error("Registro no encontrado.", 404);
+        let payload;
+        try { payload = normalize({ ...data.route, id: existing.id, kind: existing.kind, consent: true }); }
+        catch { return error("Datos de ruta no válidos.", 400); }
+        await env.DB.prepare("UPDATE route_history SET name = ?, distance = ?, payload = ? WHERE id = ?").bind(data.route.name.trim(), data.route.distance, JSON.stringify(payload), existing.id).run();
+        return json({ saved: true });
+      }
       if (data?.action !== "delete" || typeof data.id !== "string") return error("Operación no válida.", 400);
       await env.DB.prepare("DELETE FROM route_history WHERE id = ?").bind(data.id).run();
       return json({ deleted: true });

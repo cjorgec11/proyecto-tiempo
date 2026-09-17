@@ -389,7 +389,7 @@ export function renderSavedRoutes(routes) {
     const meta = document.createElement("span");
     meta.className = "route-meta";
     const date = new Date(route.createdAt);
-    meta.textContent = `${pathDistance(route.coords).toFixed(1)} km${Number.isFinite(date.getTime()) ? " · " + date.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : ""}`;
+    meta.textContent = `${(Number.isFinite(route.distance) ? route.distance : pathDistance(route.coords)).toFixed(1)} km${Number.isFinite(date.getTime()) ? " · " + date.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : ""}`;
     info.append(title, meta);
     const actions = document.createElement("div");
     actions.className = "saved-actions";
