@@ -1,6 +1,6 @@
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { passwordHash } from "../server/admin-auth.mjs";
+import { passwordHash } from "../server/crypto.mjs";
 const directory = new URL("../.data/", import.meta.url);
 await mkdir(directory, { recursive: true });
 const config = new URL("admin.env", directory);

@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../server/local-db.mjs";
 import { handleFeedback } from "../server/feedback.mjs";
-import { handleAdminAuth, passwordHash } from "../server/admin-auth.mjs";
+import { handleAdminAuth } from "../server/admin-auth.mjs";
+import { passwordHash } from "../server/crypto.mjs";
 
 const DB = openDatabase(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
 const env = { DB, AUTH_MODE: "sites", ADMIN_PASSWORD_HASH: await passwordHash("test-only-random-password-123") };

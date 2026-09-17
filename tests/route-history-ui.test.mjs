@@ -6,8 +6,8 @@ import { initRouteHistory, recordRoute } from "../js/route-history.js";
 
 test("guardado automático: requiere permiso, conserva instantánea y reintenta con el mismo ID", async () => {
   const page = new JSDOM(await readFile(new URL("../index.html", import.meta.url), "utf8"), { url: "https://ridecast.test" });
-  const original = { document: globalThis.document, localStorage: globalThis.localStorage, fetch: globalThis.fetch };
-  globalThis.document = page.window.document; globalThis.localStorage = page.window.localStorage;
+  const original = { window: globalThis.window, document: globalThis.document, localStorage: globalThis.localStorage, fetch: globalThis.fetch };
+  globalThis.window = page.window; globalThis.document = page.window.document; globalThis.localStorage = page.window.localStorage;
   const $ = id => document.getElementById(id), calls = [];
   const settle = () => new Promise(resolve => setTimeout(resolve, 15));
   let fail = true;

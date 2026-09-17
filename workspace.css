@@ -1,3 +1,26 @@
+.account-dialog {
+  width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+  overflow: auto; border: 1px solid var(--line); border-radius: 8px;
+  padding: 24px; background: var(--paper); color: var(--ink);
+}
+.account-dialog::backdrop { background: #101b3380; }
+.account-dialog h2 { font-size: 22px; line-height: 1.25; }
+.account-dialog p { overflow-wrap: anywhere; }
+.account-dialog form, .account-dialog label { display: grid; gap: 8px; }
+.account-dialog form { gap: 16px; margin-block: 16px; }
+.account-dialog input, .account-dialog textarea { width: 100%; min-width: 0; font-size: 16px; }
+.account-dialog button { white-space: normal; min-height: 44px; }
+.account-dialog #accountGoogle, .account-dialog #accountSubmit { width: 100%; justify-content: center; }
+.account-tabs { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.account-tabs button { flex: 1; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--muted); padding: 8px; }
+.account-tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.text-button { border: 0; background: transparent; color: var(--accent); text-decoration: underline; padding: 8px; }
+#accountSigned { display: flex; flex-wrap: wrap; gap: 12px; }
+#accountIdentity { width: 100%; }
+#accountLabel { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.data-editor { width: min(760px, calc(100vw - 24px)); }
+.data-editor textarea { font-family: monospace; }
+@media (max-width: 540px) { #accountLabel { max-width: 68px; } .account-dialog { padding: 18px; } .topbar-right { gap: 6px; } }
 :root {
   color-scheme: light;
   --ink: #1c304e;

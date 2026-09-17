@@ -1,5 +1,6 @@
 // Modelo: estado de la aplicación, llamadas a APIs externas (rutas y tiempo)
 // y funciones de cálculo geográfico. Sin dependencias del DOM.
+import { accountRoutes } from "./account.js";
 
 export const state = {
   currentSegments: [],
@@ -477,30 +478,17 @@ export function metricValue(segment, mode) {
   return Math.min(100, segment.gust * 1.4);
 }
 
-export function weatherEmoji(code) {
-  if ([0, 1].includes(code)) return "☀️";
-  if (code === 2) return "⛅";
-  if (code === 3) return "☁️";
-  if ([45, 48].includes(code)) return "🌫️";
-  if ([51, 53, 55].includes(code)) return "🌦️";
-  if ([61, 63, 65].includes(code)) return "🌧️";
-  if ([71, 73, 75].includes(code)) return "❄️";
-  if ([80, 81, 82].includes(code)) return "⛈️";
-  if (code === 95) return "⛈️";
-  return "🌡️";
-}
-
 export function windCompass(degrees) {
   const dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
   return dirs[Math.round((degrees % 360) / 45) % 8];
 }
 
-export function isNighttime(date) {
-  const h = date.getHours();
-  return h < 6 || h >= 21;
+export function readSavedRoutes() {
+  if (accountRoutes() !== null) return accountRoutes();
+  return readLocalRoutes();
 }
 
-export function readSavedRoutes() {
+export function readLocalRoutes() {
   try {
     const routes = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     if (!Array.isArray(routes) || routes.some((route) =>

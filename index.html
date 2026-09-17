@@ -120,7 +120,9 @@
             <label for="saveName">Nombre de la ruta</label>
             <input id="saveName" type="text" maxlength="100" placeholder="Salida del domingo">
             <div class="save-actions"><button type="button" id="saveRoute" class="primary-button"><i data-lucide="bookmark-plus"></i>Guardar</button><button type="button" id="exportRoute" class="icon-button" title="Exportar ruta actual" aria-label="Exportar ruta actual"><i data-lucide="download"></i></button></div>
-            <p class="muted source-note">Guardadas en este navegador. Exporta tus rutas para llevarlas a otro dispositivo.</p>
+            <p id="libraryAccountStatus" class="muted source-note">Rutas guardadas en este dispositivo. Inicia sesión para guardarlas en tu cuenta.</p>
+            <button id="uploadLocalRoutes" type="button" class="secondary-button" hidden><i data-lucide="cloud-upload"></i>Copiar rutas del dispositivo a mi cuenta</button>
+            <button id="refreshMyRoutes" type="button" class="secondary-button"><i data-lucide="refresh-cw"></i>Actualizar colección</button>
           </section>
           <section class="provider-section"><h2>Más recorridos</h2><div class="provider-links"><a href="https://www.wikiloc.com/" target="_blank" rel="noopener noreferrer">Abrir Wikiloc<i data-lucide="external-link"></i></a></div></section>
         </aside>
@@ -179,7 +181,7 @@
             <button type="submit" class="secondary-button"><i data-lucide="plus"></i>Guardar sugerencia</button>
             <p id="suggestionStatus" class="muted" role="status" aria-live="polite"></p>
             <p id="feedbackStatus" class="muted" role="status" aria-live="polite"></p>
-            <a id="feedbackSignIn" href="/signin-with-chatgpt?return_to=%2F%23updates" target="_top" hidden>Iniciar sesión con ChatGPT</a>
+            <button id="feedbackSignIn" type="button" class="secondary-button" hidden>Iniciar sesión</button>
           </form>
           <section class="feedback-history">
             <div class="section-heading"><h3>Sugerencias de la comunidad</h3><button type="button" id="refreshCommunity" class="icon-button" title="Actualizar sugerencias" aria-label="Actualizar sugerencias"><i data-lucide="refresh-cw"></i></button></div>

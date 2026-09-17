@@ -28,8 +28,8 @@ test("admin: muestra trazado y datos sin ejecutar texto; confirma borrado y limp
     $("adminRoutesList").querySelector("button").click(); await settle();
     assert.equal(fitted, 1); assert.equal($("adminRouteDetail").open, true);
     assert.match($("adminRouteWeather").textContent, /20/);
-    $("adminRoutesList").querySelectorAll("button")[1].click(); await settle(); assert.equal(removed, false);
-    confirm = true; $("adminRoutesList").querySelectorAll("button")[1].click(); await settle();
+    $("adminRoutesList").querySelector(".danger-button").click(); await settle(); assert.equal(removed, false);
+    confirm = true; $("adminRoutesList").querySelector(".danger-button").click(); await settle();
     assert.equal(removed, true); assert.equal($("adminRoutesList").children.length, 0);
     controller.reset(); assert.equal($("adminRouteWeather").textContent, ""); assert.equal($("adminRouteDetail").open, false);
   } finally { Object.assign(globalThis, original); page.window.close(); }

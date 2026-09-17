@@ -64,7 +64,8 @@ test("generador: crea una ruta guardable y cancelación no sustituye la ruta ant
     assert.equal(readSavedRoutes()[0].name,'Circular del domingo');
     assert.deepEqual(readSavedRoutes()[0].coords,state.currentRouteCoords);
     assert.equal(readSavedRoutes()[0].generation.surface,'dirt');
-    assert.match(document.querySelector('#generatedSaveStatus').textContent,/guardada en Mis rutas/);
+    await wait();
+    assert.match(document.querySelector('#generatedSaveStatus').textContent,/guardada en este navegador/);
     const previous = state.currentRouteCoords;
     let respond;
     globalThis.fetch = () => new Promise(resolve => { respond = resolve; });
@@ -80,6 +81,7 @@ test("generador: crea una ruta guardable y cancelación no sustituye la ruta ant
     try {
       window.Storage.prototype.setItem = () => { throw new Error('Sin espacio'); };
       click('#saveGeneratedRoute');
+      await wait();
       assert.match(document.querySelector('#generatedSaveStatus').textContent,/No se ha podido guardar/);
     } finally { window.Storage.prototype.setItem = setItem; }
     click('[data-action="load"]');

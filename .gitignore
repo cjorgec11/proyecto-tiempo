@@ -10,6 +10,7 @@ dist-electron/
 dist/
 .site-release/
 .site-artifacts/
+.site-release.tar.gz
 www/
 
 # Android: artefactos generados por Gradle
@@ -35,3 +36,5 @@ Thumbs.db
 
 # Claude Code (estado local de sesión)
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/

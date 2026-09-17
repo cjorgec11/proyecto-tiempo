@@ -1,11 +1,15 @@
 import { handleFeedback } from "./feedback.mjs";
 import { handleAdminAuth } from "./admin-auth.mjs";
 import { handleRoutes } from "./routes.mjs";
+import { handleAccount } from "./accounts.mjs";
+import { handleLibrary } from "./library.mjs";
 export default {
   async fetch(request, env) {
     // Local preview context must never be enabled by a hosted Worker.
     env = { ...env, PREVIEW_USER_ID: null, CLIENT_IP: null };
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/api/account/")) return handleAccount(request, env);
+    if (path.startsWith("/api/library")) return handleLibrary(request, env);
     if (path.startsWith("/api/routes")) return handleRoutes(request, env);
     if (path.startsWith("/api/admin/")) return handleAdminAuth(request, env);
     if (path.startsWith("/api/feedback")) return handleFeedback(request, env);

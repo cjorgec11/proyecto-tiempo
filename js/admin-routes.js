@@ -1,3 +1,4 @@
+import { editRecord } from "./admin-editor.js";
 export function initAdminRoutes(api) {
   const $ = id => document.getElementById(id);
   let page = 0, busy = false, version = 0, detailVersion = 0, map;
@@ -49,6 +50,16 @@ export function initAdminRoutes(api) {
         const actions = document.createElement("div"); actions.className = "inline-actions";
         const view = document.createElement("button"); view.type = "button"; view.className = "secondary-button"; view.textContent = "Ver datos y mapa";
         view.addEventListener("click", () => detail(route.id));
+        const edit = document.createElement("button"); edit.type = "button"; edit.className = "secondary-button"; edit.textContent = "Editar datos";
+        edit.addEventListener("click", async () => {
+          try {
+            const row = await api(`/api/routes/admin?id=${encodeURIComponent(route.id)}`);
+            if (current !== version) return;
+            editRecord({ id: row.id, name: row.name, distance: row.distance, ...row.payload }, async updated => {
+              await api("/api/routes/admin", { action: "update", id: row.id, route: updated }); await load();
+            });
+          } catch (error) { notice(error.message); }
+        });
         const remove = document.createElement("button"); remove.type = "button"; remove.className = "icon-button danger-button"; remove.title = "Eliminar registro"; remove.setAttribute("aria-label", `Eliminar ${route.name}`);
         const icon = document.createElement("i"); icon.dataset.lucide = "trash-2"; remove.append(icon);
         remove.addEventListener("click", async () => {
@@ -57,7 +68,7 @@ export function initAdminRoutes(api) {
           try { await api("/api/routes/admin", { action: "delete", id: route.id }); detailVersion++; $("adminRouteDetail").close(); await load(); notice("Registro eliminado del servidor."); }
           catch (error) { notice(error.message); remove.disabled = false; }
         });
-        actions.append(view, remove); article.append(heading, meta, actions); $("adminRoutesList").append(article);
+        actions.append(view, edit, remove); article.append(heading, meta, actions); $("adminRoutesList").append(article);
       }
       page = next; $("adminRoutesMore").hidden = !result.hasMore;
       notice(result.entries.length || more ? "" : "Todavía no hay rutas guardadas en el servidor."); window.lucide?.createIcons();

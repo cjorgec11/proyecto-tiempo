@@ -1,4 +1,35 @@
-import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const appUsers = sqliteTable("app_users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  lastSeen: integer("last_seen").notNull(),
+  password: text("password"),
+  verified: integer("verified").notNull().default(0),
+  googleSub: text("google_sub").unique(),
+}, table => [uniqueIndex("app_users_email").on(table.email)]);
+
+export const userSessions = sqliteTable("user_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  expires: integer("expires").notNull(),
+});
+export const accountTokens = sqliteTable("account_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  purpose: text("purpose").notNull(),
+  expires: integer("expires").notNull(),
+  verifier: text("verifier"),
+});
+export const savedRoutes = sqliteTable("saved_routes", {
+  userId: text("user_id").notNull(),
+  id: text("id").notNull(),
+  name: text("name").notNull(),
+  distance: real("distance").notNull(),
+  createdAt: integer("created_at").notNull(),
+  payload: text("payload").notNull(),
+}, table => [primaryKey({ columns: [table.userId, table.id] }), index("saved_routes_created").on(table.createdAt)]);
 
 export const feedback = sqliteTable("feedback", {
   id: text("id").primaryKey(),

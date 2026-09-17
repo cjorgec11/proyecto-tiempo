@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "../server/local-db.mjs";
 import { handleRoutes } from "../server/routes.mjs";
-import { handleAdminAuth, passwordHash } from "../server/admin-auth.mjs";
+import { handleAdminAuth } from "../server/admin-auth.mjs";
+import { passwordHash } from "../server/crypto.mjs";
 
 test("historial: consentimiento, rutas completas, previsión, acceso privado y eliminación", async () => {
   const DB = openDatabase(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
