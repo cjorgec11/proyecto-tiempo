@@ -65,6 +65,7 @@ repositorio y son necesarios.
 - [Sugerencias, administración e historial de rutas](docs/FEEDBACK.md)
 - [Cuentas, Google y contraseñas](docs/ACCOUNTS.md)
 - [Mapa del código y mantenimiento](docs/STRUCTURE.md)
+- [Qué es cada archivo y cuáles se pueden regenerar](docs/FILES.md)
 
 El build de Sites requiere `.openai/hosting.json`; los secretos se configuran
 en el servidor, nunca en recursos públicos. `AUTH_MODE=sites` solo es válido
