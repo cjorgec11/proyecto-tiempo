@@ -1,5 +1,7 @@
 # Mapa del repositorio
 
+Inventario detallado: [qué es cada archivo](FILES.md).
+
 ## Interfaz
 
 Las entradas `index.html`, `admin.html`, `app.js` y `workspace.css` permanecen
@@ -39,7 +41,7 @@ Ejecutar `npm test` tras cambios y `npm run build` antes de publicar.
 - `.site-release/`: repositorio separado de publicacion; no es una carpeta temporal descartable.
 - `.site-artifacts/`, `dist-electron/`: entregas anteriores; no se borran automaticamente.
 - `node_modules/`: dependencias instaladas, excluidas de Git.
-- `vendor/`: distribuciones externas, mapas de depuracion y licencias; no editar su codigo.
+- `vendor/`: bibliotecas usadas por la aplicación, mapa de depuración de la distribución activa y licencias. Se retiraron las variantes `leaflet-src.js` y `leaflet-src.esm.js` y sus mapas porque no se cargaban.
 - `android/`, `electron/`: plataformas funcionales, no codigo sobrante.
 - `.claude/`: configuracion y tareas ajenas a la aplicacion; no mover ni eliminar durante la limpieza.
 
