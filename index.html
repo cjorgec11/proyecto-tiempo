@@ -7,7 +7,7 @@
   <meta name="description" content="Planifica tus rutas en bicicleta y consulta el viento, la lluvia y la temperatura a lo largo del recorrido.">
   <title>RideCast | Rutas y tiempo</title>
   <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="./workspace.css">
+  <link rel="stylesheet" href="./interfaz.css">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Ir al contenido</a>
@@ -51,10 +51,14 @@
           <summary><span><i data-lucide="wand-sparkles"></i>Generar un circuito</span><i data-lucide="chevron-down"></i></summary>
           <form id="generatorForm" class="generator-section">
             <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option><option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
-            <div class="surface-field"><label for="routeSurface">Firme preferido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Caminos de tierra (MTB)</option></select></div>
-            <div class="generator-actions"><button id="generateRoute" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
-            <details class="surface-explanation"><summary>Criterios del firme</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava y hasta 25 % pavimentado para enlaces. Asfalto: solo carretera pavimentada, sin caminos ni senderos, según los datos del mapa. Los tramos sin datos se rechazan en modo asfalto.</p></details>
+            <div class="surface-field"><label for="terrainAssurance">Comprobación del terreno</label><select id="terrainAssurance" aria-describedby="terrainCoverage"><option value="preference">Preferencia de terreno (sin garantía)</option><option value="verified">Firme verificado (estricto)</option></select></div>
+            <p id="terrainCoverage" class="muted" role="status" aria-live="polite"></p>
+            <div class="surface-field"><label for="routeSurface">Firme elegido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Montaña (tierra y grava)</option></select></div>
+            <details class="surface-explanation"><summary>Biblioteca de tramos revisados</summary><p id="verifiedCoverage" class="muted"></p><label for="verifiedStart">Salida en la red verificada</label><select id="verifiedStart"><option value="">Selecciona un extremo de tramo</option></select><button type="button" id="useVerifiedStart" class="secondary-button">Usar esta salida</button><p class="muted">Firme verificado usa únicamente tramos revisados con fuente, fecha y vigencia. Asfalto exige asfalto; montaña excluye pavimento y estimaciones. La revisión describe el firme a una fecha, no garantiza ausencia de cambios posteriores. La orientación es una preferencia dentro de la red disponible.</p></details>
+            <div class="generator-actions"><button id="generarRuta" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
+            <details class="surface-explanation"><summary>Criterios del modo Preferencia</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava o caminos y senderos, y hasta 25 % pavimentado conocido para enlaces. Se indica qué parte del firme se estima y qué caminos no tienen superficie confirmada; montaña no garantiza 100 % tierra. Asfalto: prioriza carretera pavimentada según el mapa. Si faltan datos puede ofrecer un candidato para revisar, sin garantizar 100 % asfalto; no acepta tierra conocida. En montaña también puede ofrecer candidatos con firme incompleto, manteniendo el máximo de pavimento conocido. Firme verificado sigue excluyendo todos los tramos sin revisar.</p></details>
             <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
+            <details id="verificationEvidence" hidden><summary>Fuentes y fechas de comprobación</summary><ul id="verificationSources"></ul></details>
           </form>
           </details>
         </div>
@@ -95,7 +99,7 @@
               </div></details>
             <div class="plan-actions">
               <button type="submit" class="primary-button"><i data-lucide="cloud-sun"></i><span>Calcular previsión</span></button>
-              <button type="button" id="exportPlanRoute" class="secondary-button"><i data-lucide="download"></i><span>Exportar GPX</span></button>
+              <button type="button" id="exportarRutaPlanificada" class="secondary-button"><i data-lucide="download"></i><span>Exportar GPX</span></button>
               <button type="button" data-garmin class="secondary-button"><i data-lucide="send"></i><span>Garmin Connect</span></button>
             </div>
           </form>
@@ -156,7 +160,7 @@
             </div>
           </div>
         </div>
-        <div class="map-panel"><div id="routeMap" class="route-map" aria-label="Mapa meteorológico"></div><div class="forecast-map-tools"><button type="button" id="fitRoute" class="icon-button" title="Ajustar mapa a la ruta" aria-label="Ajustar mapa a la ruta"><i data-lucide="scan"></i></button><button type="button" id="saveForecast" class="icon-button" title="Guardar esta ruta" aria-label="Guardar esta ruta"><i data-lucide="bookmark-plus"></i></button></div></div>
+        <div class="map-panel"><div id="routeMap" class="route-map" aria-label="Mapa meteorológico"></div><div class="forecast-map-tools"><button type="button" id="encuadrarRuta" class="icon-button" title="Ajustar mapa a la ruta" aria-label="Ajustar mapa a la ruta"><i data-lucide="scan"></i></button><button type="button" id="saveForecast" class="icon-button" title="Guardar esta ruta" aria-label="Guardar esta ruta"><i data-lucide="bookmark-plus"></i></button></div></div>
         <div id="mapLegend" class="map-legend"><span><i class="dot good"></i>Favorables</span><span><i class="dot watch"></i>Atención</span><span><i class="dot bad"></i>Exigentes</span><span class="legend-caption">Condiciones del recorrido</span></div>
         <div class="section-heading timeline-head"><h2>Previsión por tramo</h2><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" class="data-source">Open-Meteo<i data-lucide="external-link"></i></a></div>
         <div id="timeline" class="timeline"></div>
@@ -189,7 +193,7 @@
             <div id="communityEntries"></div>
             <button type="button" id="moreCommunity" class="secondary-button" hidden>Ver más</button>
           </section>
-          <div class="section-heading"><h3>Mis sugerencias</h3><button type="button" id="exportSuggestions" class="icon-button" aria-label="Exportar sugerencias" title="Exportar sugerencias"><i data-lucide="download"></i></button></div>
+          <div class="section-heading"><h3>Mis sugerencias</h3><button type="button" id="exportarSugerencias" class="icon-button" aria-label="Exportar sugerencias" title="Exportar sugerencias"><i data-lucide="download"></i></button></div>
           <div id="suggestionList"></div>
           <section class="feedback-history">
             <div class="section-heading"><h3>Enviadas a RideCast</h3><button type="button" id="refreshFeedback" class="icon-button" title="Actualizar envíos" aria-label="Actualizar envíos"><i data-lucide="refresh-cw"></i></button></div>
@@ -221,6 +225,6 @@
     <div class="garmin-actions"><button id="garminShare" type="button" class="primary-button"><i data-lucide="share-2"></i>Compartir GPX</button><button id="garminDownload" type="button" class="secondary-button"><i data-lucide="download"></i>Descargar GPX</button><a class="import-link" href="https://connect.garmin.com/modern/courses" target="_blank" rel="noopener noreferrer">Abrir Garmin Connect web<i data-lucide="external-link"></i></a></div>
   </dialog>
   <script src="./vendor/lucide.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./aplicacion.js"></script>
 </body>
 </html>
