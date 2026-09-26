@@ -18,6 +18,7 @@ function datosRuta(route) {
   return { id: route.id, name: route.name.trim(), coords, distance, preview,
     startName: String(route.startName || "Salida").slice(0, 100), endName: String(route.endName || "Llegada").slice(0, 100),
     ...(route.generation && ["asphalt", "dirt"].includes(route.generation.surface) ? { generation: { surface: route.generation.surface,
+      ...(["linear", "circular", "out-and-back"].includes(route.generation.shape) ? {shape:route.generation.shape} : {}),
       ...(route.generation.needsReview === true ? {needsReview:true} : {}) } } : {}) };
 }
 

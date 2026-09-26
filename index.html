@@ -6,13 +6,15 @@
   <meta name="theme-color" content="#2463dc">
   <meta name="description" content="Planifica tus rutas en bicicleta y consulta el viento, la lluvia y la temperatura a lo largo del recorrido.">
   <title>RideCast | Rutas y tiempo</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="./cliente/assets/ridecast-favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./cliente/assets/ridecast-touch.png">
   <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="./interfaz.css">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Ir al contenido</a>
   <aside class="sidebar">
-    <a class="brand" href="#plan"><span class="brand-icon"><i data-lucide="route"></i></span><span>RideCast<small>Rutas y tiempo</small></span></a>
+    <a class="brand" href="#plan"><span class="brand-icon"><img src="./cliente/assets/ridecast-logo.png" width="44" height="44" alt=""></span><span>RideCast<small>Rutas y tiempo</small></span></a>
     <div class="nav-label">TU ESPACIO</div>
     <nav class="app-menu" aria-label="Menú principal">
       <button type="button" class="menu-button active" data-window="plan" aria-current="page"><i data-lucide="map"></i><span>Planificar</span></button>
@@ -24,7 +26,7 @@
   </aside>
   <main class="app" id="mainContent">
     <header class="topbar">
-      <a class="mobile-brand" href="#plan" aria-label="RideCast, inicio"><i data-lucide="route"></i><span>Ride<span>Cast</span></span></a>
+      <a class="mobile-brand" href="#plan" aria-label="RideCast, inicio"><img src="./cliente/assets/ridecast-logo.png" width="36" height="36" alt=""><span>Ride<span>Cast</span></span></a>
       <div class="page-heading"><p class="eyebrow"><span id="pageEyebrow">PLANIFICADOR</span></p><h1 id="pageTitle">Planifica tu salida</h1></div>
       <div class="topbar-right">
         <button type="button" id="newRoute" class="secondary-button compact" title="Nueva ruta" aria-label="Nueva ruta"><i data-lucide="plus"></i><span>Nueva ruta</span></button>
@@ -34,12 +36,6 @@
     <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden><span id="statusSymbol" aria-hidden="true"></span><span id="statusMessage"></span><button id="dismissStatus" type="button" class="icon-button" title="Cerrar aviso" aria-label="Cerrar aviso"><i data-lucide="x"></i></button></div>
 
     <section class="window active" data-window-panel="plan" aria-label="Planificador">
-      <section class="route-history-consent">
-        <label><input id="routeHistoryConsent" type="checkbox"> Guardar automáticamente mis nuevas rutas y previsiones en RideCast</label>
-        <p class="muted">El administrador podrá consultar y eliminar el trazado, las ubicaciones y los datos de tu salida. Puedes desactivar el guardado cuando quieras.</p>
-        <p id="routeHistoryStatus" class="muted" role="status" aria-live="polite"></p>
-        <button id="retryRouteHistory" type="button" class="secondary-button" hidden><i data-lucide="refresh-cw"></i>Reintentar guardado</button>
-      </section>
       <div class="route-entry" role="group" aria-label="Crear recorrido">
         <button type="button" class="secondary-button" id="quickGenerate"><i data-lucide="wand-sparkles"></i><span>Generar</span></button>
         <button type="button" class="secondary-button" id="quickDraw"><i data-lucide="map-pin-plus"></i><span>Dibujar</span></button>
@@ -48,16 +44,17 @@
       <div class="planner-layout">
         <div class="route-builder">
           <details class="generator-disclosure" id="automaticOptions" open>
-          <summary><span><i data-lucide="wand-sparkles"></i>Generar un circuito</span><i data-lucide="chevron-down"></i></summary>
+          <summary><span><i data-lucide="wand-sparkles"></i>Generar ruta</span><i data-lucide="chevron-down"></i></summary>
           <form id="generatorForm" class="generator-section">
             <div class="generator-fields"><div><label for="targetDistance">Distancia objetivo</label><div class="unit-input"><input id="targetDistance" type="number" min="5" max="150" step="1" value="30" inputmode="numeric" required><span>km</span></div></div><div><label for="routeDirection">Orientación</label><select id="routeDirection"><option value="auto">Cualquiera</option><option value="0">Norte</option><option value="90">Este</option><option value="180">Sur</option><option value="270">Oeste</option></select></div></div>
-            <div class="surface-field"><label for="terrainAssurance">Comprobación del terreno</label><select id="terrainAssurance" aria-describedby="terrainCoverage"><option value="preference">Preferencia de terreno (sin garantía)</option><option value="verified">Firme verificado (estricto)</option></select></div>
+            <div class="surface-field"><label for="terrainAssurance">Datos del firme</label><select id="terrainAssurance" aria-describedby="terrainCoverage"><option value="preference">Datos del mapa</option><option value="verified">Tramos revisados</option></select></div>
             <p id="terrainCoverage" class="muted" role="status" aria-live="polite"></p>
             <div class="surface-field"><label for="routeSurface">Firme elegido</label><select id="routeSurface"><option value="asphalt">Asfalto</option><option value="dirt">Montaña (tierra y grava)</option></select></div>
-            <details class="surface-explanation"><summary>Biblioteca de tramos revisados</summary><p id="verifiedCoverage" class="muted"></p><label for="verifiedStart">Salida en la red verificada</label><select id="verifiedStart"><option value="">Selecciona un extremo de tramo</option></select><button type="button" id="useVerifiedStart" class="secondary-button">Usar esta salida</button><p class="muted">Firme verificado usa únicamente tramos revisados con fuente, fecha y vigencia. Asfalto exige asfalto; montaña excluye pavimento y estimaciones. La revisión describe el firme a una fecha, no garantiza ausencia de cambios posteriores. La orientación es una preferencia dentro de la red disponible.</p></details>
+            <details class="surface-explanation"><summary>Tramos revisados</summary><p id="verifiedCoverage" class="muted"></p><label for="verifiedStart">Salida en la red verificada</label><select id="verifiedStart"><option value="">Selecciona un extremo de tramo</option></select><button type="button" id="useVerifiedStart" class="secondary-button">Usar esta salida</button><p class="muted">Solo se usan tramos con revisión vigente. El firme puede haber cambiado desde entonces.</p></details>
             <div class="generator-actions"><button id="generarRuta" type="button" class="primary-button"><i data-lucide="refresh-cw"></i><span>Generar ruta</span></button><button id="cancelGeneration" type="button" class="icon-button" title="Cancelar generación" aria-label="Cancelar generación" hidden><i data-lucide="x"></i></button></div>
-            <details class="surface-explanation"><summary>Criterios del modo Preferencia</summary><p class="muted source-note">Montaña: prioriza el menor pavimento posible entre las alternativas, con al menos 60 % tierra/grava o caminos y senderos, y hasta 25 % pavimentado conocido para enlaces. Se indica qué parte del firme se estima y qué caminos no tienen superficie confirmada; montaña no garantiza 100 % tierra. Asfalto: prioriza carretera pavimentada según el mapa. Si faltan datos puede ofrecer un candidato para revisar, sin garantizar 100 % asfalto; no acepta tierra conocida. En montaña también puede ofrecer candidatos con firme incompleto, manteniendo el máximo de pavimento conocido. Firme verificado sigue excluyendo todos los tramos sin revisar.</p></details>
+            <details class="surface-explanation"><summary>Cómo se elige el firme</summary><p class="muted source-note">Los puntos marcados son pasos obligatorios. Carretera exige pavimento confirmado: busca circuito, ruta lineal y, después, ida y vuelta por una carretera apta en ambos sentidos. Si no encuentra ruta, prueba a marcar otro punto. Montaña puede incluir tramos por revisar.</p></details>
             <p id="generatorResult" class="muted" role="status" aria-live="polite"></p>
+            <details id="generatorDetails" class="surface-explanation" hidden><summary>Detalles de la ruta</summary><p id="generatorMetrics" class="muted"></p></details>
             <details id="verificationEvidence" hidden><summary>Fuentes y fechas de comprobación</summary><ul id="verificationSources"></ul></details>
           </form>
           </details>
@@ -73,7 +70,7 @@
             <button type="button" id="undoWaypoint" class="icon-button" title="Deshacer último punto" aria-label="Deshacer último punto"><i data-lucide="undo-2"></i></button>
             <button type="button" id="clearWaypoints" class="icon-button" title="Borrar recorrido" aria-label="Borrar recorrido"><i data-lucide="trash-2"></i></button>
           </div></div>
-          <p class="map-credit">Mapa © OpenStreetMap · Rutas OSRM / BRouter</p>
+          <p class="map-credit">Mapa y localidades © OpenStreetMap · Rutas OSRM / BRouter · Geocodificación Photon</p>
         </section>
         <aside class="ride-settings">
           <section id="generatedRouteSave" class="generated-route-save" hidden aria-label="Guardar ruta generada">
@@ -170,10 +167,16 @@
       <div class="updates-layout">
         <section class="release-notes">
           <div class="section-heading"><h2>Lo nuevo en RideCast</h2><span class="source-label">Septiembre 2026</span></div>
-          <article class="release-item"><i data-lucide="route"></i><div><h3>El firme importa</h3><p>Carretera verificada según los datos del mapa. En montaña, menos pavimento entre las alternativas válidas.</p></div></article>
-          <article class="release-item"><i data-lucide="bookmark-check"></i><div><h3>De circuito a ruta guardada</h3><p>Pon nombre al recorrido generado y recupéralo desde Mis rutas.</p></div></article>
-          <article class="release-item"><i data-lucide="send"></i><div><h3>Tu recorrido en Garmin Connect</h3><p>Comparte o descarga el GPX para importarlo en Connect.</p></div></article>
+          <article class="release-item"><i data-lucide="bookmark-check"></i><div><h3>Rutas guardadas al crearlas</h3><p>Las rutas dibujadas o importadas aparecen en Mis rutas incluso sin iniciar sesión. También se conserva su historial en RideCast.</p></div></article>
+          <article class="release-item"><i data-lucide="navigation"></i><div><h3>GPX en el sentido de la marcha</h3><p>Antes de exportar o enviar a Garmin, se comprueba el recorrido ciclista. Si el sentido no se puede confirmar, se detiene la exportación.</p></div></article>
+          <article class="release-item"><i data-lucide="route"></i><div><h3>Rutas con localidades</h3><p>El nombre de las rutas nuevas incluye las localidades detectadas a lo largo del recorrido. Se consultan solo algunas posiciones del trazado y puedes editar el nombre antes de guardar.</p></div></article>
+          <article class="release-item"><i data-lucide="user-round"></i><div><h3>Rutas de tu cuenta</h3><p>Guarda y recupera recorridos en tu cuenta. Puedes copiar los que ya tienes en este navegador.</p></div></article>
           <article class="release-item"><i data-lucide="cloud-sun"></i><div><h3>El tiempo, tramo a tramo</h3><p>Consulta viento, lluvia y temperatura según la hora estimada de paso.</p></div></article>
+          <details class="upcoming-ideas"><summary>Ideas para próximas mejoras</summary><ul>
+            <li>Señalar en el mapa los tramos que impiden verificar una exportación.</li>
+            <li>Comparar dos recorridos por viento y lluvia previstos.</li>
+            <li>Avisar de cortes y obras cuando haya datos fiables.</li>
+          </ul></details>
         </section>
         <section class="suggestion-section">
           <h2>¿Qué mejorarías?</h2>

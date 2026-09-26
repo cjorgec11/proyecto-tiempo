@@ -140,11 +140,22 @@ export async function gestionarCuenta(request, env) {
       return json({ message: "Si la dirección es válida, recibirás un enlace por correo. Revisa también spam." });
     }
     if (path !== "/api/account/login") return json({ error: "No encontrado." }, 404);
-    const expected = row?.password || ("pbkdf2$100000$00000000000000000000000000000000$" + "0".repeat(64));
+    // El propietario puede activar su cuenta con la credencial de administración
+    // configurada como secreto. No se crean cuentas ni se reemplazan contraseñas
+    // de usuarios existentes hasta que la credencial sea correcta.
+    const ownerEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+    const ownerBootstrap = !row && email === ownerEmail && /^pbkdf2\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(env.ADMIN_PASSWORD_HASH || "");
+    const expected = row?.password || (ownerBootstrap ? env.ADMIN_PASSWORD_HASH : "pbkdf2$100000$00000000000000000000000000000000$" + "0".repeat(64));
     const actual = await hashContrasena(typeof data.password === "string" && data.password.length <= 128 ? data.password : "", expected.split("$")[2]);
     const key = await crypto.subtle.importKey("raw", encoder.encode(expected), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
     const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(expected));
-    if (!await crypto.subtle.verify("HMAC", key, signature, encoder.encode(actual)) || !row?.verified) return json({ error: "Correo o contraseña incorrectos, o correo sin confirmar." }, 401);
+    if (!await crypto.subtle.verify("HMAC", key, signature, encoder.encode(actual)) || !(row?.verified || ownerBootstrap)) return json({ error: "Correo o contraseña incorrectos, o correo sin confirmar." }, 401);
+    if (ownerBootstrap) {
+      await env.DB.prepare("INSERT OR IGNORE INTO app_users (id, email, name, last_seen, password, verified) VALUES (?, ?, ?, ?, ?, 1)")
+        .bind(crypto.randomUUID(), email, "Jorge", Date.now(), expected).run();
+      row = await env.DB.prepare("SELECT * FROM app_users WHERE email = ?").bind(email).first();
+      if (!row?.verified || row.password !== expected) return json({ error: "No se pudo activar la cuenta. Vuelve a intentarlo." }, 409);
+    }
     return session(request, env, row);
   } catch { return json({ error: "No se pudo completar el acceso. Vuelve a intentarlo." }, 503); }
 }

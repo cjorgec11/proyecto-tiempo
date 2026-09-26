@@ -423,6 +423,8 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 .topbar { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
 .sidebar { background: var(--paper); }
 .brand-icon { background: var(--accent-soft); border-radius: 8px; width: 44px; height: 44px; }
+.brand-icon img { display: block; width: 44px; height: 44px; object-fit: contain; }
+.mobile-brand>img { display: block; width: 36px; height: 36px; object-fit: contain; flex: none; }
 .brand-icon svg { width: 26px; height: 26px; }
 .route-entry { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; max-width: 620px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
 .route-entry .secondary-button { background: transparent; border: 0; border-bottom: 3px solid transparent; border-radius: 0; min-height: 52px; }
@@ -461,6 +463,10 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 .release-item { display: flex; gap: 18px; padding: 24px 0; border-bottom: 1px solid var(--line); }
 .release-item>svg { color: #158378; width: 24px; height: 24px; margin-top: 3px; }
 .release-item p { margin-top: 8px; color: var(--muted); max-width: 55ch; }
+.upcoming-ideas { padding: 20px 0; color: var(--muted); }
+.upcoming-ideas summary { cursor: pointer; color: var(--ink); font-weight: 650; min-height: 36px; }
+.upcoming-ideas ul { margin: 8px 0 0; padding-left: 22px; line-height: 1.5; }
+.upcoming-ideas li + li { margin-top: 8px; }
 .suggestion-section { padding-left: 32px; border-left: 1px solid var(--line); min-width: 0; }
 .suggestion-section>p { margin: 10px 0 20px; }
 #suggestionForm { display: grid; gap: 12px; margin-bottom: 28px; }
@@ -480,9 +486,6 @@ output { font-size: 16px; font-weight: 700; color: var(--accent); }
 .admin-login label { margin: 0; }
 #adminPanel { padding-top: 24px; }
 #adminEntries label { max-width: 260px; margin-top: 18px; }
-.route-history-consent { padding: 12px 0 20px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
-.route-history-consent label { display: flex; align-items: start; gap: 10px; }
-.route-history-consent input[type="checkbox"] { appearance: auto; width: 20px; height: 20px; min-height: 20px; flex: none; accent-color: var(--accent); }
 .admin-route-dialog { width: min(900px,calc(100% - 24px)); max-height: 90svh; overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--paper); }
 .admin-route-dialog::backdrop { background: #0008; }
 #adminRouteMap { height: 320px; margin-block: 16px; }
