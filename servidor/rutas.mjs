@@ -1,8 +1,7 @@
 import { esAdministrador } from "./autenticacion-administracion.mjs";
-import { leerJson } from "./utilidades-http.mjs";
+import { leerJson, responderJson as json } from "./utilidades-http.mjs";
 import { account } from "./cuentas.mjs";
 import { digest, hex } from "./criptografia.mjs";
-const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
 const error = (message, status) => json({ error: message }, status);
 const validPoint = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180;
 function visitante(request) {

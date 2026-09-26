@@ -1,8 +1,7 @@
 import { account } from "./cuentas.mjs";
 import { esAdministrador } from "./autenticacion-administracion.mjs";
-import { leerJson } from "./utilidades-http.mjs";
+import { leerJson, responderJson as json } from "./utilidades-http.mjs";
 
-const json = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 function datosRuta(route) {
   if (!route || !/^[a-f0-9-]{36}$/i.test(route.id || "") || typeof route.name !== "string" || !route.name.trim() || route.name.length > 100 ||
     !Array.isArray(route.coords) || route.coords.length < 2 || route.coords.length > 50000 || route.coords.some(p => !p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon) || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180)) throw new Error("Ruta no válida.");

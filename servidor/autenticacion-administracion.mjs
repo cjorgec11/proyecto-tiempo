@@ -1,9 +1,8 @@
 import { account } from "./cuentas.mjs";
 import { digest, unhex, hex, hashContrasena } from "./criptografia.mjs";
-import { leerJson } from "./utilidades-http.mjs";
+import { leerJson, responderJson as json } from "./utilidades-http.mjs";
 const cookieName = "ridecast_admin";
 const encoder = new TextEncoder();
-const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
 
 function configured(env) { return /^pbkdf2\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(env.ADMIN_PASSWORD_HASH || ""); }
 function token(request) {

@@ -1,9 +1,9 @@
 import { esAdministrador } from "./autenticacion-administracion.mjs";
-import { leerJson as body } from "./utilidades-http.mjs";
+import { leerJson as body, responderJson } from "./utilidades-http.mjs";
 import { account } from "./cuentas.mjs";
 const categories = new Set(["routes", "weather", "interface", "other"]);
 const statuses = new Set(["new", "reviewed", "resolved"]);
-const json = (data, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+const json = (data, status = 200) => responderJson(data, status, { "X-Content-Type-Options": "nosniff" });
 const fail = (message, status) => json({ error: message }, status);
 
 export async function gestionarSugerencias(request, env) {

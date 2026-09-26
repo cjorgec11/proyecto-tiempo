@@ -13,8 +13,6 @@ export const state = {
   currentDistance: 0,
   currentDuration: 0,
   waypoints: [],
-  routeMode: "mixto",
-  currentRoadRatio: null,
 };
 
 export const etiquetasTiempo = {

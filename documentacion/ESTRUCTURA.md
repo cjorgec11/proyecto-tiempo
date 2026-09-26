@@ -11,8 +11,11 @@ en la raiz para conservar las URL, el servidor local y los empaquetados nativos.
 - `cliente/vista.js`: mapas y presentacion.
 - `cliente/controlador.js`: acciones del planificador y biblioteca.
 - `cliente/cuenta.js`: interfaz de cuenta y cliente de las API personales.
-- `cliente/sugerencias.js`, `cliente/historial-rutas.js`: sugerencias e historial consentido.
-- `cliente/admin*.js`: panel, edicion y colecciones del administrador.
+- `cliente/sugerencias.js`, `cliente/historial-rutas.js`: sugerencias e historial automático de rutas.
+- `cliente/localidades.js`: nombres de rutas a partir de las localidades del recorrido.
+- `cliente/rutas-verificadas.js`, `cliente/red-verificada.js`: generación y catálogo de tramos revisados.
+- `cliente/verificar-exportacion.js`: comprobación del sentido ciclista antes de exportar.
+- `cliente/administracion.js`, `cliente/*-administracion.js`: panel, edición y colecciones del administrador.
 
 ## Servidor
 

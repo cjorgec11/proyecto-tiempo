@@ -45,7 +45,11 @@ con los empaquetados. Solo se mantiene la hoja de estilos que utiliza la app.
 | `controlador.js` | Conecta acciones del usuario con el modelo y la vista. |
 | `cuenta.js` | Interfaz de cuenta, autenticación y biblioteca por usuario. |
 | `sugerencias.js` | Sugerencias y votos comunitarios. |
-| `historial-rutas.js` | Consentimiento y envío del historial de rutas/previsiones. |
+| `historial-rutas.js` | Envío automático y reintentos del historial de rutas/previsiones. |
+| `localidades.js` | Consulta localidades del recorrido para nombrar las rutas. |
+| `rutas-verificadas.js`, `red-verificada.js` | Generación sobre el catálogo de tramos revisados. |
+| `verificar-exportacion.js` | Comprueba el sentido ciclista antes de exportar GPX. |
+| `assets/ridecast-logo.png`, `ridecast-favicon.png`, `ridecast-touch.png` | Logotipo y variantes para el navegador y dispositivos táctiles. |
 | `administracion.js` | Sesión administrativa y gestión de sugerencias. |
 | `rutas-administracion.js` | Consulta y gestión del historial del servidor. |
 | `biblioteca-administracion.js` | Administración de bibliotecas de rutas y usuarios. |
@@ -59,11 +63,11 @@ con los empaquetados. Solo se mantiene la hoja de estilos que utiliza la app.
 | `cuentas.mjs` | Cuentas, sesiones, verificación, recuperación y acceso con Google. |
 | `autenticacion-administracion.mjs` | Autenticación administrativa, caducidad y límites de intentos. |
 | `biblioteca.mjs` | Biblioteca de rutas por cuenta y operaciones administrativas relacionadas. |
-| `rutas.mjs` | Historial consentido de rutas/previsiones y su administración. |
+| `rutas.mjs` | Historial de rutas/previsiones, visitantes manuales y administración. |
 | `sugerencias.mjs` | Sugerencias privadas/públicas, votos y cambios de estado. |
 | `seguridad.mjs` | Política de identidad, cabeceras y configuración de seguridad. |
 | `criptografia.mjs` | Contraseñas, hashes y tokens compartidos. |
-| `utilidades-http.mjs` | Utilidades HTTP compartidas por las API. |
+| `utilidades-http.mjs` | Lectura JSON con límite de tamaño y respuestas JSON sin caché compartidas por las API. |
 | `base-local.mjs` | Abre SQLite, aplica migraciones y adapta consultas; no se incluye en el Worker. |
 
 ## Base de datos
@@ -97,6 +101,7 @@ cambiado después. Son necesarias para actualizar instalaciones antiguas.
 | `preparar-publicacion.mjs` | Prepara fuentes seleccionadas en `.site-release/`, sin configuración personal ni datos. |
 | `subir-sites.mjs` | Publicación de fuentes en Sites; recibe la credencial por terminal sin eco. No es código del navegador. |
 | `configurar-administracion.mjs` | Genera el acceso administrativo local, si no existe, dentro de `.data/`. |
+| `importar-tramos-verificados.mjs` | Valida un archivo de tramos y sustituye el catálogo de firme revisado. |
 
 ## Pruebas: `pruebas/`
 
@@ -111,10 +116,15 @@ cambiado después. Son necesarias para actualizar instalaciones antiguas.
 | `interfaz-sugerencias.test.mjs` | Interfaz y reintentos de sugerencias. |
 | `sugerencias.test.mjs` | Sugerencias, privacidad, votos y persistencia. |
 | `modelo.test.mjs` | Geometría, formatos de rutas, meteorología y almacenamiento. |
-| `interfaz-historial-rutas.test.mjs` | Consentimiento, instantáneas y reintentos. |
+| `interfaz-historial-rutas.test.mjs` | Guardado automático, visitantes manuales y reintentos. |
+| `localidades.test.mjs` | Nombres, localidades repetidas y fallos de consulta. |
+| `rutas-verificadas.test.mjs` | Evidencias, vigencia, continuidad y sentidos de los tramos revisados. |
+| `verificar-exportacion.test.mjs` | Verificación del recorrido antes de exportar y fallos del servicio. |
+| `regresiones-cuenta-rutas.test.mjs` | Cambios de cuenta, guardados tardíos y limpieza de rutas privadas. |
 | `rutas.test.mjs` | Validación y permisos del historial. |
 | `seguridad-servidor.test.mjs` | Configuración, suplantación, proxy HTTPS y protección de archivos. |
 | `generador-en-vivo.mjs` | Prueba manual de servicios reales con coordenadas públicas. Ejecutar `node pruebas/generador-en-vivo.mjs`; requiere Internet y no se ejecuta con `npm run probar`. |
+| `generador-arnedo-en-vivo.mjs`, `ubicacion-en-vivo.mjs` | Comprobaciones manuales del generador y ubicación con servicios reales. |
 | `ejemplos/ruta-movil.gpx` | Ejemplo pequeño para probar manualmente la importación desde el selector de archivos del móvil. |
 
 ## Bibliotecas: `vendor/`
@@ -172,7 +182,9 @@ elige la apropiada para cada dispositivo. Se conservan las plataformas activas.
 | `ESTRUCTURA.md` | Resumen de arquitectura y mantenimiento. |
 | `DESPLIEGUE.md` | Servidor, publicación, proxy HTTPS y seguridad. |
 | `CUENTAS.md` | Cuentas, correo, Google y autenticación. |
-| `SUGERENCIAS.md` | Sugerencias, votos, administración e historial consentido. |
+| `SUGERENCIAS.md` | Sugerencias, votos, administración e historial automático. |
+| `FIRME-VERIFICADO.md` | Catálogo, evidencias y límites de la verificación del firme. |
+| `RENOMBRADOS.md` | Correspondencia histórica entre las rutas antiguas y actuales. |
 
 ## Carpetas y archivos locales excluidos de Git
 
