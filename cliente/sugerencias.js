@@ -38,7 +38,7 @@ export function iniciarSugerencias() {
       if (!more) $("communityEntries").replaceChildren();
       $("communityStatus").textContent = result.entries.length || more ? "" : "Todavía no hay sugerencias publicadas.";
       for (const entry of result.entries) {
-        const article = vistaSugerencia(entry, false);
+        const article = vistaSugerencia(entry);
         const vote = document.createElement("button"); vote.type = "button"; vote.className = "secondary-button vote-button";
         const icon = document.createElement("i"); icon.dataset.lucide = "thumbs-up";
         const label = document.createElement("span"); vote.append(icon, label);

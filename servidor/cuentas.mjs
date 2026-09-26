@@ -1,10 +1,9 @@
 import { identificadorUsuario } from "./seguridad.mjs";
 import { hashContrasena, hex, digest } from "./criptografia.mjs";
-import { leerJson } from "./utilidades-http.mjs";
+import { leerJson, responderJson as json } from "./utilidades-http.mjs";
 
 const encoder = new TextEncoder();
 const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
-const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { "Cache-Control": "no-store", ...headers } });
 const cookieValue = (request, name) => request.headers.get("cookie")?.split(";").map(s => s.trim()).find(s => s.startsWith(name + "="))?.slice(name.length + 1) || "";
 const cookie = (request, name, value, age, sameSite = "Strict") => `${name}=${value}; Path=/api; HttpOnly; SameSite=${sameSite}; Max-Age=${age}${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
 const emailAddress = value => typeof value === "string" && /^[^\s@]{1,64}@gmail\.com$/i.test(value.trim()) ? value.trim().toLowerCase() : null;

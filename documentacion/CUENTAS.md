@@ -40,7 +40,7 @@ Sin correo configurado, el registro y la recuperacion muestran que no estan disp
 
 - Invitado: planificador, generacion, importacion, prevision y exportacion; las rutas locales existentes siguen en el dispositivo.
 - Usuario: coleccion propia de rutas, sugerencias enviadas y votos. Copiar rutas locales a la cuenta requiere una accion explicita.
-- El historial automatico requiere consentimiento y se desactiva al cambiar de cuenta.
+- El historial se envía automáticamente para la cuenta activa; los visitantes pueden registrar rutas dibujadas manualmente. Al cambiar de cuenta se descartan los envíos pendientes de la identidad anterior.
 - Solo un correo verificado igual a ADMIN_EMAIL obtiene administracion. El nombre, los datos del navegador y los encabezados enviados por el visitante no asignan roles.
 - El administrador edita y elimina sugerencias, rutas guardadas e historial/previsiones. No puede ver las contrasenas originales.
 - Mantener AUTH_MODE=disabled desactiva el acceso personal heredado de ChatGPT. Las sesiones propias funcionan tanto en Node como en Sites.

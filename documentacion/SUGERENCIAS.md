@@ -2,7 +2,7 @@
 
 ## Comunidad
 
-Las nuevas sugerencias publicadas aparecen en Novedades > Sugerencias de la comunidad. Los visitantes con acceso al Site pueden leerlas; publicar y votar requiere una cuenta ChatGPT. Se permite un voto por cuenta, reversible. No se muestran identidades.
+Las nuevas sugerencias publicadas aparecen en Novedades > Sugerencias de la comunidad. Los visitantes con acceso al Site pueden leerlas; publicar y votar requiere una sesión reconocida por la aplicación. Se permite un voto por cuenta, reversible. No se muestran identidades.
 El historial local y los envios privados anteriores se mantienen privados. No hay avisos por correo ni dependencia de servicios de correo.
 
 ## Administrador
@@ -24,16 +24,16 @@ Antes de publicar en Sites, configurar `ADMIN_PASSWORD_HASH` como valor privado 
 Configurar también `AUTH_MODE=sites` únicamente si el dispatcher de Sites es la única entrada y controla las cabeceras de identidad. Sin esa opción, las funciones personales se deniegan por defecto. El servidor Node independiente no admite ese modo.
 El build incluye Worker, recursos publicos y migraciones D1. La migracion 0002 elimina el estado de los antiguos avisos por correo y agrega sesiones y limites de acceso. No modifica los textos ni los votos.
 Se conserva la audiencia del Site; esta pagina no lo convierte en publico. Si el Site exige iniciar sesion con ChatGPT, ese control sigue siendo necesario ademas de la contraseña administrativa.
-La base SQLite local no se copia a produccion. Estos cambios aun no estan publicados.
-
-## Comprobaciones
+La base SQLite local no se copia a produccion.
 
 ## Historial de rutas y previsiones
 
-El planificador incluye una autorizacion desactivada inicialmente. Al activarla, las nuevas rutas completadas (dibujadas, generadas o importadas) y las previsiones se envian al servidor con un identificador estable de usuario. No sube el historial antiguo. Desactivarla detiene nuevos guardados; los registros existentes permanecen hasta que el administrador los elimine.
+El planificador envía automáticamente las nuevas rutas y previsiones de la cuenta activa. Los visitantes sin cuenta pueden registrar rutas dibujadas manualmente y se identifican mediante una cookie HttpOnly; en la base se guarda un hash de ese identificador. No se sube el historial antiguo. Al cambiar de identidad se descartan los envíos pendientes; los registros existentes permanecen hasta que el administrador los elimine.
 El panel privado permite listar registros, consultar el mapa, salida, velocidad, distancia y meteorologia por tramo, y eliminarlos definitivamente con confirmacion. Los registros no aparecen en la comunidad y requieren sesion de administrador para leerlos o borrarlos.
-Se conserva la geometria completa dentro del limite de 50000 puntos y 1,8 MB por peticion. Se limita a 120 guardados por hora y cuenta. Un fallo muestra registros pendientes y un boton de reintento. Los pendientes permanecen solo en la pestaña abierta, no se consideran guardados hasta recibir confirmacion del servidor.
+Se conserva la geometria completa dentro del limite de 50000 puntos y 1,8 MB por peticion. Se limita a 120 guardados por hora e identidad. Los fallos se reintentan automáticamente cada 15 segundos, al recuperar la conexión o al volver a la pestaña. Los pendientes permanecen solo en la pestaña abierta, no se consideran guardados hasta recibir confirmacion del servidor.
 La eliminacion borra el registro y su carga de datos de la base activa; no borra las copias locales del usuario ni controla las copias de seguridad del proveedor.
 
-`node --test pruebas/autenticacion-administracion.test.mjs pruebas/sugerencias.test.mjs pruebas/interfaz-sugerencias.test.mjs pruebas/aplicacion.test.mjs`
+## Comprobaciones
+
+`node --test pruebas/*.test.mjs`
 Las pruebas usan bases aisladas y contraseñas de prueba, nunca la contraseña local real.

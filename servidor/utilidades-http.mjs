@@ -1,3 +1,7 @@
+export function responderJson(value, status = 200, headers = {}) {
+  return Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } });
+}
+
 export async function leerJson(request, limit = 12000) {
   if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("Formato no válido.");
   const reader = request.body?.getReader();
