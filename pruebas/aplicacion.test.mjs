@@ -12,7 +12,7 @@ window.confirm = () => true;
 const maps = [], markers = [];
 const layer = () => ({ addTo(){return this;},clearLayers(){},bindTooltip(){return this;},bindPopup(){return this;},on(){return this;},closeTooltip(){} });
 globalThis.L = window.L = {
-  map(element) { const map = {element,fits:0,setView(){return this;},invalidateSize(){},fitBounds(){this.fits++;},on(){}}; maps.push(map); return map; },
+  map(element) { const map = {element,fits:0,setView(){return this;},invalidateSize(){},fitBounds(){this.fits++;},on(event,handler){this[event]=handler;}}; maps.push(map); return map; },
   tileLayer:layer,layerGroup:layer,polyline:layer,latLngBounds:points=>points,divIcon:options=>options,
   marker(point,options){markers.push(options);return layer();},
 };
@@ -26,6 +26,64 @@ const coords = [{lat:40.4,lon:-3.7},{lat:40.42,lon:-3.72}];
 const generatedResponse = () => ({ok:true,json:async()=>({type:'FeatureCollection',features:[{properties:{'track-length':'30000',messages:[['Distance','WayTags'],['30000','surface=ground']]},geometry:{type:'LineString',coordinates:[[-3.7,40.4],[-3.6,40.5],[-3.5,40.4],[-3.7,40.4]]}}]})});
 iniciarAplicacion();
 after(()=>page.window.close());
+
+test("guardar una ruta dibujada sin calcular la previsión", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    click("#clearWaypoints");
+    globalThis.fetch = async url => Response.json(url.includes("/nearest/")
+      ? { waypoints: [{ location: [-3.7, 40.4] }] }
+      : { code: "Ok", routes: [{ distance: 3000, geometry: { coordinates: [[-3.7,40.4],[-3.72,40.42]] } }] });
+    maps[0].click({ latlng: { lat: 40.4, lng: -3.7 } });
+    await wait();
+    maps[0].click({ latlng: { lat: 40.42, lng: -3.72 } });
+    await new Promise(resolve => setTimeout(resolve, 550));
+    assert.equal(state.currentRouteCoords.length, 2);
+    assert.equal(leerRutasGuardadas()[0].name, "Ruta dibujada");
+    assert.deepEqual(leerRutasGuardadas()[0].coords, state.currentRouteCoords);
+    document.querySelector("#saveName").value = "Ruta dibujada";
+    click("#saveRoute");
+    await wait();
+    assert.equal(leerRutasGuardadas()[0].name, "Ruta dibujada");
+    assert.deepEqual(leerRutasGuardadas()[0].coords, state.currentRouteCoords);
+    escribirRutasGuardadas([]);
+    document.querySelector("#saveName").value = "Desde Mis rutas";
+    click("#librarySave");
+    await wait();
+    assert.equal(leerRutasGuardadas()[0].name, "Desde Mis rutas");
+    escribirRutasGuardadas([]);
+    document.querySelector("#saveName").value = "Desde previsión";
+    click("#saveForecast");
+    await wait();
+    assert.equal(leerRutasGuardadas()[0].name, "Desde previsión");
+  } finally {
+    globalThis.fetch = originalFetch;
+    escribirRutasGuardadas([]);
+    click("#clearWaypoints");
+  }
+});
+
+test("ruta dibujada: incorpora la localidad en el nombre guardado automáticamente", async () => {
+  const originalFetch = globalThis.fetch;
+  let lookups = 0;
+  try {
+    click('#clearWaypoints'); escribirRutasGuardadas([]);
+    globalThis.fetch = async url => {
+      if (url.startsWith('https://photon.komoot.io/')) {
+        lookups++;
+        if (lookups > 1) return {ok:false};
+        const query = new URL(url).searchParams;
+        return Response.json({features:[{properties:{name:'Calahorra'},geometry:{coordinates:[Number(query.get('lon')),Number(query.get('lat'))]}}]});
+      }
+      return Response.json(url.includes('/nearest/') ? {waypoints:[{location:[-3.7,40.4]}]}
+        : {code:'Ok',routes:[{distance:3000,geometry:{coordinates:[[-3.7,40.4],[-3.72,40.42]]}}]});
+    };
+    maps[0].click({latlng:{lat:40.4,lng:-3.7}}); await wait();
+    maps[0].click({latlng:{lat:40.42,lng:-3.72}});
+    for (let i=0;i<350 && !leerRutasGuardadas()[0]?.name.includes('Calahorra');i++) await wait();
+    assert.match(leerRutasGuardadas()[0].name,/Ruta dibujada · Calahorra/);
+  } finally { globalThis.fetch = originalFetch; escribirRutasGuardadas([]); click('#clearWaypoints'); }
+});
 
 test("planificador: orden de lectura y cinco orientaciones seleccionables", () => {
   assert.equal(document.querySelector('#terrainAssurance').value,'preference');
@@ -48,19 +106,21 @@ test("generador: crea una ruta guardable y cancelación no sustituye la ruta ant
     assert.match(document.querySelector('#generatorResult').textContent, /salida/);
     state.waypoints = [coords[0]];
     document.querySelector('#routeSurface').value = 'dirt';
-    globalThis.fetch = async () => generatedResponse();
+    globalThis.fetch = async url => url.startsWith('https://photon.komoot.io/') ? {ok:false} : generatedResponse();
     click('#generarRuta');
     assert.equal(document.querySelector('#generarRuta').disabled,true);
     await wait();
     assert.equal(state.importedRoute.name,'Circular 30.0 km');
-    assert.match(document.querySelector('#generatorResult').textContent, /Objetivo 30/);
+    assert.match(document.querySelector('#generatorMetrics').textContent, /Objetivo 30/);
     assert.equal(document.querySelector('#generarRuta').disabled,false);
     assert.equal(document.querySelector('#generatedRouteSave').hidden,false);
     assert.equal(document.querySelector('#generatedRouteName').value,'Circular 30.0 km');
     click('#saveGeneratedRoute');
+    for (let i=0;i<300 && !leerRutasGuardadas().length;i++) await wait();
     assert.equal(leerRutasGuardadas()[0].name,'Circular 30.0 km');
     document.querySelector('#generatedRouteName').value = 'Circular del domingo';
     click('#saveGeneratedRoute');
+    for (let i=0;i<300 && leerRutasGuardadas()[0]?.name !== 'Circular del domingo';i++) await wait();
     assert.equal(leerRutasGuardadas().length,1);
     assert.equal(leerRutasGuardadas()[0].name,'Circular del domingo');
     assert.deepEqual(leerRutasGuardadas()[0].coords,state.currentRouteCoords);
@@ -96,6 +156,53 @@ test("generador: crea una ruta guardable y cancelación no sustituye la ruta ant
   }
 });
 
+test("generador: incorpora la localidad detectada en el nombre guardado", async () => {
+  const originalFetch = globalThis.fetch;
+  let lookups = 0;
+  try {
+    click('#clearWaypoints'); escribirRutasGuardadas([]);
+    state.waypoints = [coords[0]];
+    document.querySelector('#routeSurface').value = 'dirt';
+    globalThis.fetch = async url => {
+      if (!url.startsWith('https://photon.komoot.io/')) return generatedResponse();
+      lookups++;
+      if (lookups > 1) return {ok:false};
+      const query = new URL(url).searchParams;
+      return Response.json({features:[{properties:{name:'Arnedo'},geometry:{coordinates:[Number(query.get('lon')),Number(query.get('lat'))]}}]});
+    };
+    click('#generarRuta');
+    for (let i=0;i<300 && !document.querySelector('#generatedRouteName').value.includes('Arnedo');i++) await wait();
+    assert.match(document.querySelector('#generatedRouteName').value,/· Arnedo$/);
+    click('#saveGeneratedRoute'); await wait();
+    assert.match(leerRutasGuardadas()[0].name,/· Arnedo$/);
+  } finally { globalThis.fetch = originalFetch; escribirRutasGuardadas([]); click('#clearWaypoints'); }
+});
+
+test("generador: incluye los puntos ya marcados en el recorrido final", async () => {
+  const previousFetch = globalThis.fetch;
+  const via = {lat:40.44,lon:-3.7};
+  try {
+    click('#clearWaypoints');
+    state.waypoints = [coords[0],via];
+    document.querySelector('#routeSurface').value='asphalt';
+    document.querySelector('#routeDirection').value='0';
+    globalThis.fetch = async url => {
+      const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+      return Response.json({features:[{geometry:{type:'LineString',coordinates:stops},properties:{
+        'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=residential surface=asphalt']]
+      }}]});
+    };
+    click('#generarRuta'); await wait();
+    assert.ok(state.importedRoute);
+    assert.ok(state.importedRoute.coords.some(p => Math.abs(p.lat-via.lat)<0.00001 && Math.abs(p.lon-via.lon)<0.00001));
+    assert.match(document.querySelector('#generatorResult').textContent,/100 % carretera pavimentada/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    document.querySelector('#routeDirection').value='auto';
+    click('#clearWaypoints');
+  }
+});
+
 test("ubicación: crea la salida, controla permisos y descarta respuestas tardías", () => {
   let success, failure, options;
   Object.defineProperty(window.navigator, 'geolocation', { configurable: true, value: {
@@ -105,13 +212,13 @@ test("ubicación: crea la salida, controla permisos y descarta respuestas tardí
     click('#useDeviceLocation');
     assert.equal(document.querySelector('#useDeviceLocation').disabled, true);
     assert.equal(options.timeout, 15000);
-    success({coords: {latitude: 41.2, longitude: -2.3}});
-    assert.deepEqual(state.waypoints, [{lat:41.2, lon:-2.3}]);
+    success({coords: {latitude: 42.22603, longitude: -2.10086}});
+    assert.deepEqual(state.waypoints, [{lat:42.22603, lon:-2.10086}]);
     assert.equal(document.querySelector('#useDeviceLocation').disabled, false);
     click('#useDeviceLocation');
     failure({code:1});
     assert.match(document.querySelector('#statusMessage').textContent, /denegado/);
-    assert.equal(state.waypoints[0].lat, 41.2);
+    assert.equal(state.waypoints[0].lat, 42.22603);
     click('#useDeviceLocation');
     click('#clearWaypoints');
     success({coords: {latitude: 42, longitude: -3}});
@@ -143,8 +250,12 @@ test("Garmin prepara el GPX completo y maneja compartir, cancelar y errores", as
   assert.equal(await view.compartirGpx(file, platform), 'failed');
 });
 
-test("Garmin impide rutas vacías y abre el diálogo con la ruta actual", () => {
+test("Garmin impide rutas vacías y abre el diálogo con la ruta actual verificada", async () => {
   const dialog = document.querySelector('#garminModal');
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ code: 'Ok', routes: [{ distance: 2800,
+    geometry: { coordinates: coords.map(point => [point.lon, point.lat]) } }] });
+  try {
   dialog.showModal = () => dialog.setAttribute('open', '');
   state.currentRouteCoords = [];
   click('[data-garmin]');
@@ -152,11 +263,13 @@ test("Garmin impide rutas vacías y abre el diálogo con la ruta actual", () => 
   assert.match(document.querySelector('#statusMessage').textContent, /Crea o importa/);
   state.currentRouteCoords = coords;
   click('[data-garmin]');
+  await wait();
   assert.equal(dialog.hasAttribute('open'), true);
   assert.equal(document.querySelector('#garminShare').disabled, true);
   assert.match(document.querySelector('#garminStatus').textContent, /descarga/);
   dialog.removeAttribute('open');
   state.currentRouteCoords = [];
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("menú persistente: las cuatro ventanas cambian y actualizan el enlace", async()=>{
@@ -318,7 +431,7 @@ test("modo verificado: falta de cobertura conserva la ruta y no consulta servici
   try {
     document.querySelector('#terrainAssurance').value='verified';
     document.querySelector('#terrainAssurance').dispatchEvent(new window.Event('change'));
-    assert.match(document.querySelector('#terrainCoverage').textContent,/Sin cobertura/);
+    assert.match(document.querySelector('#terrainCoverage').textContent,/Sin tramos/);
     state.currentRouteCoords=coords;
     click('#generarRuta'); await wait();
     assert.equal(calls,0);
@@ -349,7 +462,7 @@ test("modo verificado: muestra las evidencias como texto y las limpia al cambiar
     assert.equal(document.querySelectorAll('#verificationSources li').length,4);
     assert.equal(document.querySelector('#verificationSources img'),null);
     assert.equal(document.querySelector('#verificationEvidence').hidden,false);
-    assert.match(document.querySelector('#generatorResult').textContent,/Firme revisado/);
+    assert.match(document.querySelector('#generatorMetrics').textContent,/Revisión desde/);
     click('#clearWaypoints');
     assert.equal(document.querySelector('#verificationEvidence').hidden,true);
     assert.equal(document.querySelector('#verificationSources').textContent,'');
@@ -362,17 +475,17 @@ test("modo verificado: muestra las evidencias como texto y las limpia al cambiar
 
 test("preferencia: candidato visible y advertencia conservada al guardar y cargar",async()=>{
   const previousFetch=globalThis.fetch;
-  globalThis.fetch=async url=>({ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number))},properties:{'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=residential']]}}]})});
+  globalThis.fetch=async url=>url.startsWith('https://photon.komoot.io/') ? {ok:false} : ({ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number))},properties:{'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=residential']]}}]})});
   try {
     click('#clearWaypoints'); escribirRutasGuardadas([]); state.waypoints=[coords[0]];
     document.querySelector('#terrainAssurance').value='preference';
-    document.querySelector('#routeSurface').value='asphalt';
+    document.querySelector('#routeSurface').value='dirt';
     document.querySelector('#targetDistance').value='30';
     click('#generarRuta');
     for(let i=0;i<800 && document.querySelector('#generarRuta').disabled;i++) await wait();
     assert.equal(document.querySelector('#generarRuta').disabled,false);
-    assert.match(document.querySelector('#generatorResult').textContent,/Candidato para revisar/);
-    assert.match(document.querySelector('#generatorResult').textContent,/sin datos 100 %/);
+    assert.match(document.querySelector('#generatorResult').textContent,/Firme por revisar/);
+    assert.match(document.querySelector('#generatorMetrics').textContent,/sin datos 100 %/);
     assert.equal(state.importedRoute.generation.needsReview,true);
     assert.equal(document.querySelector('#verificationEvidence').hidden,true);
     click('#saveGeneratedRoute'); await wait();

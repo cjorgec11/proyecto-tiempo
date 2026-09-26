@@ -20,6 +20,8 @@ const user = { id: "account-a", name: "Ana", email: "ana@example.test" };
 let sessionUser = user, failure = "", pendingSave;
 const saved = new Map();
 globalThis.fetch = async (path, options = {}) => {
+  if (path.startsWith("https://routing.openstreetmap.de/routed-bike/route/")) return Response.json({ code: "Ok", routes: [{ distance: 140000,
+    geometry: { coordinates: coords.map(point => [point.lon, point.lat]) } }] });
   if (path.endsWith("/config")) return Response.json({ config: { available: true, email: true } });
   if (failure && path.includes(failure)) return Response.json({ error: "Servicio temporalmente no disponible" }, { status: 503 });
   if (path.endsWith("/session")) return Response.json({ user: sessionUser });

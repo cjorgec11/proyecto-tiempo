@@ -14,6 +14,7 @@
     "prepare:release": "node herramientas/preparar-publicacion.mjs",
     "setup:admin": "node herramientas/configurar-administracion.mjs",
     "test": "node --test pruebas/*.test.mjs",
+    "test:ubicacion:en-vivo": "node pruebas/ubicacion-en-vivo.mjs",
     "electron": "electron .",
     "build:win": "electron-builder --win --x64",
     "cap:sync": "npm run build:mobile && cap sync android",

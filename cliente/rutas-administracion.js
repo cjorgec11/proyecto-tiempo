@@ -3,6 +3,7 @@ export function iniciarRutasAdministracion(api) {
   const $ = id => document.getElementById(id);
   let page = 0, busy = false, version = 0, detailVersion = 0, map;
   const notice = message => { $("adminRoutesStatus").textContent = message; };
+  const ownerLabel = id => id?.startsWith("guest:") ? "Visitante" : id;
   function clearMap() { if (map) { map.remove(); map = null; } }
   function reset() {
     version++; detailVersion++; $("adminRoutesList").replaceChildren();
@@ -15,7 +16,7 @@ export function iniciarRutasAdministracion(api) {
       const route = await api(`/api/routes/admin?id=${encodeURIComponent(id)}`);
       if (current !== detailVersion) return;
       $("adminRouteTitle").textContent = route.name;
-      $("adminRouteMeta").textContent = `${route.distance.toFixed(1)} km · ${route.payload.speed} km/h · Salida: ${new Date(route.payload.departure).toLocaleString("es-ES")} · Usuario: ${route.user_id} · ${route.payload.coords.length} puntos`;
+      $("adminRouteMeta").textContent = `${route.distance.toFixed(1)} km · ${route.payload.speed} km/h · Salida: ${new Date(route.payload.departure).toLocaleString("es-ES")} · Usuario: ${ownerLabel(route.user_id)} · ${route.payload.coords.length} puntos`;
       $("adminRouteDetail").showModal(); clearMap();
       map = L.map("adminRouteMap");
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap" }).addTo(map);
@@ -46,7 +47,7 @@ export function iniciarRutasAdministracion(api) {
         const article = document.createElement("article"); article.className = "suggestion-item";
         const heading = document.createElement("h3"); heading.textContent = route.name;
         const meta = document.createElement("p"); meta.className = "muted";
-        meta.textContent = `${route.kind === "forecast" ? "Previsión" : "Planificada"} · ${route.distance.toFixed(1)} km · ${new Date(route.created_at).toLocaleString("es-ES")} · Usuario: ${route.user_id}`;
+        meta.textContent = `${route.kind === "forecast" ? "Previsión" : "Planificada"} · ${route.distance.toFixed(1)} km · ${new Date(route.created_at).toLocaleString("es-ES")} · Usuario: ${ownerLabel(route.user_id)}`;
         const actions = document.createElement("div"); actions.className = "inline-actions";
         const view = document.createElement("button"); view.type = "button"; view.className = "secondary-button"; view.textContent = "Ver datos y mapa";
         view.addEventListener("click", () => detail(route.id));

@@ -97,11 +97,40 @@ export function bearing(a, b) {
 }
 
 const BIKE_SERVICE = "https://routing.openstreetmap.de/routed-bike";
+const BROUTER_SERVICE = "https://brouter.de/brouter";
+const BROUTER_PAUSE_KEY = "ridecast.brouterRetryAfter";
+
+function referenciaRegional(texto) {
+  // Las referencias nacionales y de autovía no identifican una regional/comarcal.
+  const references = String(texto || "").toUpperCase().match(/\b([A-Z]{1,3})[-\s](\d{2,4})\b/g) || [];
+  return references.some(reference => {
+    const [, prefix, number] = reference.match(/^([A-Z]{1,3})[-\s](\d{2,4})$/) || [];
+    return prefix && !["N", "E", "AP"].includes(prefix) && (prefix !== "A" || number.length >= 3);
+  });
+}
+
+function pausarBRouter(response) {
+  const retry = response.headers?.get?.("Retry-After");
+  const seconds = /^\d+$/.test(retry || "") ? Number(retry) : (Date.parse(retry || "") - Date.now()) / 1000;
+  const pause = Number.isFinite(seconds) ? Math.min(600, Math.max(90, seconds)) : 120;
+  try { localStorage.setItem(BROUTER_PAUSE_KEY, String(Date.now() + pause * 1000)); } catch {}
+}
 
 async function obtenerJson(url, signal) {
-  const timeout = AbortSignal.timeout(25000);
+  const brouter = url.startsWith(BROUTER_SERVICE);
+  if (brouter) {
+    try {
+      if (Number(localStorage.getItem(BROUTER_PAUSE_KEY)) > Date.now()) {
+        const error = new Error("El servicio de rutas pide esperar antes de volver a intentarlo. Tu ruta anterior se conserva.");
+        error.status = 429;
+        throw error;
+      }
+    } catch (error) { if (error.status === 429) throw error; }
+  }
+  const timeout = AbortSignal.timeout(brouter ? 10000 : 12000);
   const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!response.ok) {
+    if (brouter && [403,429].includes(response.status)) pausarBRouter(response);
     const error = new Error([403, 429].includes(response.status)
       ? "El servicio de rutas pide esperar antes de volver a intentarlo. Tu ruta anterior se conserva."
       : "El servicio no está disponible. Inténtalo de nuevo.");
@@ -124,7 +153,7 @@ export async function ajustarACarretera(lat, lon) {
   }
 }
 
-export async function trazarRutaPorPuntos(points, { signal, radiuses } = {}) {
+export async function trazarRutaPorPuntos(points, { signal, radiuses, bearings } = {}) {
   if (points.length < 2) throw new Error("Marca al menos dos puntos en el mapa.");
   if (points.length > 25) throw new Error("El máximo es de 25 puntos por recorrido.");
   if (!points.every(coordenadaValida)) throw new Error("Las coordenadas de la ruta no son válidas.");
@@ -132,6 +161,7 @@ export async function trazarRutaPorPuntos(points, { signal, radiuses } = {}) {
     const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
     const params = new URLSearchParams({ alternatives: "false", steps: "false", overview: "full", geometries: "geojson" });
     if (radiuses) params.set("radiuses", radiuses.join(";"));
+    if (bearings) params.set("bearings", bearings.map(([angle, range]) => `${Math.round(angle)},${range}`).join(";"));
     const data = await obtenerJson(`${BIKE_SERVICE}/route/v1/cycling/${coords}?${params}`, signal);
     const route = data.routes?.[0];
     if (data.code !== "Ok" || !route?.geometry?.coordinates?.length || !(route.distance > 0)) {
@@ -144,6 +174,39 @@ export async function trazarRutaPorPuntos(points, { signal, radiuses } = {}) {
     signal?.throwIfAborted();
     throw new Error("No se pudo trazar una ruta ciclista. Prueba con puntos más cercanos o importa un GPX.");
   }
+}
+
+// Alternativa con otro proveedor cuando BRouter limita las consultas.
+// OSRM no informa del firme: nunca se presenta como pavimento confirmado.
+async function rutaRegionalCiclista(start, targetKm, heading, { signal, waypoints, enforceHeading }) {
+  const radius = targetKm / 6;
+  const circuit = [start, ...waypoints, destination(start, radius, heading - 45),
+    destination(start, radius * 1.7, heading), destination(start, radius, heading + 45), start];
+  const linear = [start, ...waypoints, destination(start, targetKm * 0.85, heading)];
+  const params = new URLSearchParams({ alternatives: "false", steps: "true", overview: "full", geometries: "geojson" });
+  for (const [shape, points] of [["circular", circuit], ["linear", linear]]) {
+    if (points.length > 25) continue;
+    const path = points.map(p => `${p.lon},${p.lat}`).join(";");
+    try {
+      const data = await obtenerJson(`${BIKE_SERVICE}/route/v1/cycling/${path}?${params}`, signal);
+      const route = data.code === "Ok" && data.routes?.[0];
+      const coords = route?.geometry?.coordinates?.map(([lon, lat]) => ({ lat, lon }));
+      const distance = route?.distance / 1000;
+      const steps = route?.legs?.flatMap(leg => leg.steps || []) || [];
+      const regionalKm = steps.reduce((sum, step) => sum + (referenciaRegional(`${step.ref || ""} ${step.name || ""}`) ? Number(step.distance) || 0 : 0), 0) / 1000;
+      if (!coords || coords.length < 2 || !coords.every(coordenadaValida) || !Number.isFinite(distance)
+        || Math.abs(distance - targetKm) / targetKm > (shape === "circular" ? 0.15 : 0.25)
+        || regionalKm < distance * 0.5 || !pasaPorPuntos(coords, [start, ...waypoints])
+        || (enforceHeading && (!inicioCompatible(coords, heading)
+          || (shape === "linear" && !rumboCompatible(start, coords.at(-1), heading))))
+        || (shape === "circular" ? haversine(coords[0], coords.at(-1)) >= 0.05 || proporcionRutaRepetida(coords) > 0.2
+          : haversine(coords[0], coords.at(-1)) < targetKm * 0.3)) continue;
+      return { coords, distance, routed: true, generation: { surface: "asphalt", shape, comarcal: true,
+        needsReview: true, pavedRoadVerified: false, surfaces: { paved: 0, unpaved: 0, unknown: 1 },
+        targetKm, error: Math.abs(distance - targetKm) / targetKm, repeated: proporcionRutaRepetida(coords) } };
+    } catch { signal?.throwIfAborted(); return null; }
+  }
+  return null;
 }
 
 function destination(origin, km, heading) {
@@ -203,6 +266,27 @@ export function esCarreteraAsfaltadaCompleta(messages, routeMeters) {
   return covered >= routeMeters;
 }
 
+export function esRutaComarcalCompatible(messages, routeMeters) {
+  if (!Array.isArray(messages?.[0]) || !(routeMeters > 0)) return false;
+  const distanceIndex = messages[0].indexOf("Distance"), tagsIndex = messages[0].indexOf("WayTags");
+  if (distanceIndex < 0 || tagsIndex < 0) return false;
+  const roads = new Set(["primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "unclassified", "residential", "living_street", "service"]);
+  const comarcal = new Set(["secondary", "secondary_link", "tertiary", "tertiary_link"]);
+  const pavement = new Set(["asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes"]);
+  let covered = 0, onComarcal = 0;
+  for (const row of messages.slice(1)) {
+    const length = Number(row?.[distanceIndex]);
+    if (!Array.isArray(row) || !Number.isFinite(length) || length < 0) return false;
+    if (!length) continue;
+    const tags = Object.fromEntries(String(row[tagsIndex] || "").split(/\s+/).filter(tag => tag.includes("=")).map(tag => tag.split("=")));
+    if (!roads.has(tags.highway) || (tags.surface && !pavement.has(tags.surface))) return false;
+    covered += length;
+    if (comarcal.has(tags.highway) || referenciaRegional(tags.ref)) onComarcal += length;
+  }
+  // La clase de carretera no demuestra el firme. El resultado se señalará para revisión.
+  return covered >= routeMeters * 0.995 && onComarcal >= routeMeters * 0.5;
+}
+
 export function cumpleSuperficie(surfaces, surface, pavedRoadVerified = false) {
   if (!surfaces) return false;
   if (surface === "asphalt") return pavedRoadVerified && surfaces.paved === 1 && surfaces.unpaved === 0 && surfaces.unknown === 0;
@@ -219,14 +303,15 @@ export async function rutaPorSuperficie(points, surface, { signal } = {}) {
     "profile:correctMisplacedViaPoints": "1", "profile:correctMisplacedViaPointsDistance": "400",
   });
   if (surface === "dirt") params.set("profile:StrictNOBicycleaccess", "1");
-  const data = await obtenerJson(`https://brouter.de/brouter?${params}`, signal);
+  const data = await obtenerJson(`${BROUTER_SERVICE}?${params}`, signal);
   const feature = data.features?.find(item => item.geometry?.type === "LineString");
   const coords = feature?.geometry.coordinates?.map(([lon, lat]) => ({ lat, lon }));
   const distance = Number(feature?.properties?.["track-length"]) / 1000;
   if (!coords || coords.length < 3 || !coords.every(coordenadaValida) || !Number.isFinite(distance) || distance <= 0) {
     throw new Error("El servicio no ha devuelto un recorrido válido para ese firme.");
   }
-  return { coords, distance, routed: true, surface, surfaces: desgloseSuperficies(feature.properties.messages, distance * 1000),
+  return { coords, distance, routed: true, surface, messages: feature.properties.messages,
+    surfaces: desgloseSuperficies(feature.properties.messages, distance * 1000),
     pavedRoadVerified: esCarreteraAsfaltadaCompleta(feature.properties.messages, distance * 1000) };
 }
 
@@ -246,29 +331,142 @@ export function proporcionRutaRepetida(coords) {
   return total ? repeated / total : 1;
 }
 
-export async function generarRutaCircular(start, targetKm, heading, { surface = "asphalt", allowUncertain = false, signal, onProgress = () => {} } = {}) {
+export function pasaPorPuntos(coords, points, tolerance = 0.25) {
+  let index = 0, fraction = 0;
+  for (const point of points) {
+    while (index < coords.length - 1) {
+      const position = posicionEnSegmento(point, coords[index], coords[index+1]);
+      if (position.distance <= tolerance && position.fraction >= fraction) {
+        fraction = position.fraction;
+        break;
+      }
+      index++;
+      fraction = 0;
+    }
+    if (index === coords.length - 1 && haversine(coords[index], point) > tolerance) return false;
+  }
+  return true;
+}
+
+function posicionEnSegmento(point, a, b) {
+  const scale = Math.cos(point.lat * Math.PI / 180) * 111.2;
+  const ax = (a.lon-point.lon)*scale, ay = (a.lat-point.lat)*111.2;
+  const bx = (b.lon-point.lon)*scale, by = (b.lat-point.lat)*111.2;
+  const dx = bx-ax, dy = by-ay;
+  const projection = dx*dx+dy*dy ? Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy))) : 0;
+  return {distance:Math.hypot(ax+projection*dx,ay+projection*dy), fraction:projection};
+}
+
+function cercaDelTrazado(point, coords, maxKm = 0.1) {
+  for (let i = 1; i < coords.length; i++) {
+    if (posicionEnSegmento(point,coords[i-1],coords[i]).distance <= maxKm) return true;
+  }
+  return false;
+}
+
+function rumboCompatible(start, end, heading) {
+  const difference = Math.abs(((bearing(start, end) - heading + 540) % 360) - 180);
+  return difference <= 65;
+}
+
+function inicioCompatible(coords, heading) {
+  const first = coords[0];
+  const next = coords.find(point => haversine(first, point) >= 0.3);
+  return next ? rumboCompatible(first, next, heading) : false;
+}
+
+async function buscarRutaLinealPavimentada(start, targetKm, heading, {signal, onProgress, waypoints, enforceHeading}) {
+  let best = null, comarcal = null;
+  const directions = [heading, heading + 35, heading - 35];
+  for (let attempt = 0; attempt < directions.length; attempt++) {
+    signal?.throwIfAborted();
+    onProgress(attempt + 1, directions.length, "lineal");
+    const direction = directions[attempt];
+    const radius = targetKm * [0.75, 0.85, 0.95][attempt];
+    try {
+      const route = await rutaPorSuperficie([start, ...waypoints, destination(start, radius, direction)], "asphalt", {signal});
+      const verified = cumpleSuperficie(route.surfaces, "asphalt", route.pavedRoadVerified);
+      const compatible = !verified && esRutaComarcalCompatible(route.messages, route.distance * 1000);
+      if (!verified && !compatible) continue;
+      const error = Math.abs(route.distance - targetKm) / targetKm;
+      const repeated = proporcionRutaRepetida(route.coords);
+      if (error > (verified ? 0.05 : 0.15) || repeated > 0.2 || !pasaPorPuntos(route.coords, [start, ...waypoints])
+        || (enforceHeading && (!rumboCompatible(start, route.coords.at(-1), heading) || !inicioCompatible(route.coords, heading)))
+        || haversine(route.coords[0], route.coords.at(-1)) < targetKm * 0.45) continue;
+      if (verified) {
+        if (!best || error + repeated < best.error + best.repeated) best = {...route, error, repeated};
+        if (error <= 0.02 && repeated <= 0.08) break;
+      } else if (!comarcal || error + repeated < comarcal.error + comarcal.repeated) comarcal = {...route, error, repeated};
+    } catch (error) {
+      signal?.throwIfAborted();
+      if ([403, 429].includes(error.status) || error.name === "TimeoutError") throw error;
+    }
+  }
+  return {best, comarcal};
+}
+
+async function buscarIdaVueltaPavimentada(start, targetKm, heading, {signal, onProgress, waypoints, enforceHeading}) {
+  let best = null;
+  const offset = Math.random() * 20 - 10;
+  const directions = [heading + offset, heading + 30 + offset, heading - 30 + offset];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    signal?.throwIfAborted();
+    onProgress(attempt + 1, 2, "ida y vuelta");
+    const direction = directions[attempt];
+    const radius = targetKm * [0.42, 0.5][attempt];
+    try {
+      const outbound = await rutaPorSuperficie([start, ...waypoints, destination(start, radius, direction)], "asphalt", {signal});
+      if (!cumpleSuperficie(outbound.surfaces, "asphalt", outbound.pavedRoadVerified)
+        || !pasaPorPuntos(outbound.coords, [start, ...waypoints])
+        || (enforceHeading && (!rumboCompatible(start, outbound.coords.at(-1), heading) || !inicioCompatible(outbound.coords, heading)))) continue;
+      if (Math.abs(2 * outbound.distance - targetKm) / targetKm > 0.05
+        || haversine(start, outbound.coords.at(-1)) < 0.25) continue;
+      const reverse = await rutaPorSuperficie([outbound.coords.at(-1), ...waypoints.slice().reverse(), start], "asphalt", {signal});
+      const reversedPoints = outbound.coords.slice().reverse().filter((_,i) => i % Math.max(1,Math.floor(outbound.coords.length / 12)) === 0);
+      if (!cumpleSuperficie(reverse.surfaces, "asphalt", reverse.pavedRoadVerified)
+        || !pasaPorPuntos(reverse.coords, [outbound.coords.at(-1), ...waypoints.slice().reverse(), start])
+        || !reversedPoints.every(point => cercaDelTrazado(point, reverse.coords))) continue;
+      const distance = outbound.distance + reverse.distance;
+      const error = Math.abs(distance - targetKm) / targetKm;
+      if (error > 0.05) continue;
+      const route = {coords:[...outbound.coords, ...reverse.coords.slice(1)], distance,
+        surfaces:outbound.surfaces, error, repeated:proporcionRutaRepetida([...outbound.coords, ...reverse.coords.slice(1)])};
+      if (!best || error < best.error) best = route;
+      if (error <= 0.02) break;
+    } catch (error) {
+      signal?.throwIfAborted();
+      if ([403, 429].includes(error.status) || error.name === "TimeoutError") throw error;
+    }
+  }
+  return best;
+}
+
+export async function generarRutaCircular(start, targetKm, heading, { surface = "asphalt", allowUncertain = false, signal, onProgress = () => {}, waypoints = [], enforceHeading = true } = {}) {
   if (!coordenadaValida(start)) throw new Error("Elige primero un punto de salida en el mapa o utiliza tu ubicación.");
   if (!Number.isFinite(targetKm) || targetKm < 5 || targetKm > 150) throw new Error("Elige una distancia entre 5 y 150 km.");
   if (!Number.isFinite(heading)) throw new Error("Selecciona una orientación válida.");
   if (!["asphalt", "dirt"].includes(surface)) throw new Error("Selecciona asfalto o caminos de tierra.");
+  if (!Array.isArray(waypoints) || waypoints.length > 24 || !waypoints.every(coordenadaValida)) throw new Error("Revisa los puntos marcados.");
   let radius = targetKm / 6, best = null, received = false, matchingFirme = false;
   let lower = null, upper = null;
   let candidate = null;
-  for (let attempt = 0; attempt < 6; attempt++) {
+  const attempts = surface === "asphalt" ? 3 : 6;
+  let paused = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     signal?.throwIfAborted();
-    if (attempt) await new Promise(resolve => setTimeout(resolve, 1100));
+    if (attempt) await new Promise(resolve => setTimeout(resolve, surface === "asphalt" ? 250 : 1100));
     signal?.throwIfAborted();
-    onProgress(attempt + 1, 6);
+    onProgress(attempt + 1, attempts);
     // Cada orientación empieza de nuevo: sus radios no son intercambiables.
     if (attempt === 3) { radius = targetKm / 6; lower = null; upper = null; }
     const direction = heading + (attempt < 3 ? 0 : 35);
-    const points = [start, destination(start, radius, direction - 45),
+    const points = [start, ...waypoints, destination(start, radius, direction - 45),
       destination(start, radius * 1.7, direction), destination(start, radius, direction + 45), start];
     try {
       const route = await rutaPorSuperficie(points, surface, { signal });
       received = true;
       const closed = haversine(route.coords[0], route.coords.at(-1)) < 0.05;
-      const nearStart = haversine(start, route.coords[0]) <= 0.25;
+      const nearStart = pasaPorPuntos(route.coords, [start, ...waypoints]);
       const error = Math.abs(route.distance - targetKm) / targetKm;
       const repeated = proporcionRutaRepetida(route.coords);
       const suitable = cumpleSuperficie(route.surfaces, surface, route.pavedRoadVerified);
@@ -281,12 +479,20 @@ export async function generarRutaCircular(start, targetKm, heading, { surface = 
           || (route.surfaces.paved === best.surfaces.paved && (route.surfaces.unknown < best.surfaces.unknown
             || (route.surfaces.unknown === best.surfaces.unknown && score < best.score)))
         : score < best.score);
-      if (suitable && closed && nearStart && error <= 0.05 && repeated <= 0.2 && better) best = { ...route, error, repeated, score, preferred };
+      if (suitable && closed && nearStart && (surface !== "asphalt" || !enforceHeading || inicioCompatible(route.coords, heading))
+        && error <= 0.05 && repeated <= 0.2 && better) best = { ...route, error, repeated, score, preferred };
       // Un candidato incompleto nunca desplaza una ruta compatible ni ignora
       // superficies conocidas que contradigan la preferencia solicitada.
       const incomplete = !route.surfaces || route.surfaces.unknown > 0;
       const compatibleKnown = !route.surfaces || (surface === "asphalt" ? route.surfaces.unpaved === 0 : route.surfaces.paved <= 0.25);
-      if (allowUncertain && !suitable && incomplete && compatibleKnown && closed && nearStart && error <= 0.05 && repeated <= 0.2
+      if (surface === "asphalt" && !suitable && incomplete && compatibleKnown
+        && esRutaComarcalCompatible(route.messages, route.distance * 1000)
+        && closed && nearStart && (!enforceHeading || inicioCompatible(route.coords, heading))
+        && error <= 0.05 && repeated <= 0.2
+        && (!candidate || error + repeated < candidate.error + candidate.repeated)) {
+        candidate = { ...route, error, repeated, comarcal: true };
+      }
+      if (surface === "dirt" && allowUncertain && !suitable && incomplete && compatibleKnown && closed && nearStart && error <= 0.05 && repeated <= 0.2
         && (!candidate || score < candidate.score)) candidate = { ...route, error, repeated, score, preferred };
       const surfaceComplete = surface === "dirt" ? best?.preferred === 1 : best?.preferred >= 0.95;
       if (best?.error <= 0.02 && best.repeated <= 0.08 && surfaceComplete) break;
@@ -297,16 +503,67 @@ export async function generarRutaCircular(start, targetKm, heading, { surface = 
         : radius * Math.max(0.6, Math.min(1.5, targetKm / route.distance));
     } catch (error) {
       signal?.throwIfAborted();
-      if ([403, 429].includes(error.status)) throw error;
+      if ([403, 429].includes(error.status) || error.name === "TimeoutError") {
+        if (surface !== "asphalt") throw error;
+        paused = error;
+        break;
+      }
     }
+  }
+  // Un circuito por carreteras regionales/comarcales tiene prioridad sobre una línea.
+  // Si falta surface, se entrega como candidato con el firme por revisar.
+  if (surface === "asphalt" && (best || candidate)) {
+    const chosen = best || candidate;
+    return { coords: chosen.coords, distance: chosen.distance, routed: true,
+      generation: { surface, shape: "circular", surfaces: chosen.surfaces,
+        pavedRoadVerified: Boolean(best?.pavedRoadVerified), needsReview: !best,
+        comarcal: Boolean(chosen.comarcal), targetKm, error: chosen.error, repeated: chosen.repeated } };
+  }
+  if (paused && !best) {
+    const regional = await rutaRegionalCiclista(start, targetKm, heading, {signal, waypoints, enforceHeading});
+    if (regional) return regional;
+    throw paused;
+  }
+  if (!best && received && surface === "asphalt") {
+    let linear;
+    try { linear = await buscarRutaLinealPavimentada(start, targetKm, heading, {signal, onProgress, waypoints, enforceHeading}); }
+    catch (error) {
+      if ([403,429].includes(error.status) || error.name === "TimeoutError") {
+        const regional = await rutaRegionalCiclista(start, targetKm, heading, {signal, waypoints, enforceHeading});
+        if (regional) return regional;
+      }
+      throw error;
+    }
+    if (linear.best) return {coords:linear.best.coords, distance:linear.best.distance, routed:true,
+      generation:{surface, shape:"linear", surfaces:linear.best.surfaces, pavedRoadVerified:true,
+        needsReview:false, targetKm, error:linear.best.error, repeated:linear.best.repeated}};
+    if (linear.comarcal) return {coords:linear.comarcal.coords, distance:linear.comarcal.distance, routed:true,
+      generation:{surface, shape:"linear", surfaces:linear.comarcal.surfaces, pavedRoadVerified:false,
+        needsReview:true, comarcal:true, targetKm, error:linear.comarcal.error, repeated:linear.comarcal.repeated}};
+    let returnRoute;
+    try { returnRoute = await buscarIdaVueltaPavimentada(start, targetKm, heading, {signal, onProgress, waypoints, enforceHeading}); }
+    catch (error) {
+      if ([403,429].includes(error.status) || error.name === "TimeoutError") {
+        const regional = await rutaRegionalCiclista(start, targetKm, heading, {signal, waypoints, enforceHeading});
+        if (regional) return regional;
+      }
+      throw error;
+    }
+    if (returnRoute) return {coords:returnRoute.coords, distance:returnRoute.distance, routed:true,
+      generation:{surface, shape:"out-and-back", surfaces:returnRoute.surfaces, pavedRoadVerified:true,
+        needsReview:false, targetKm, error:returnRoute.error, repeated:returnRoute.repeated}};
+  }
+  if (!best && surface === "asphalt") {
+    const regional = await rutaRegionalCiclista(start, targetKm, heading, {signal, waypoints, enforceHeading});
+    if (regional) return regional;
   }
   const needsReview = !best && Boolean(candidate);
   best ||= candidate;
   if (!best && received && !matchingFirme) throw new Error(surface === "dirt"
     ? "No se encontró un circuito con al menos un 60 % de tierra/grava o caminos y como máximo un 25 % pavimentado conocido. Puede faltar información del mapa. Prueba otra salida, orientación o distancia. Tu ruta anterior se conserva."
-    : "No se pudo verificar un circuito 100 % por carretera pavimentada: hay caminos, senderos o tramos sin datos suficientes. Prueba otra salida, orientación o distancia. Tu ruta anterior se conserva.");
+    : "No hay una ruta pavimentada compatible. Marca otro punto en el mapa o cambia la salida, orientación o distancia.");
   if (!best) throw new Error(received
-    ? "No se encontró un circuito dentro del 5 % de la distancia y con pocos tramos repetidos. Prueba otra orientación o distancia. Tu ruta anterior se conserva."
+    ? `No se encontró ${surface === "asphalt" ? "una ruta pavimentada" : "un circuito"} dentro del 5 % de la distancia. Marca otro punto o cambia la orientación.`
     : "El servicio de rutas por firme no ha podido responder. Inténtalo de nuevo. Tu ruta anterior se conserva.");
   return { coords: best.coords, distance: best.distance, routed: true,
     generation: { surface, surfaces: best.surfaces, pavedRoadVerified: best.pavedRoadVerified, needsReview, targetKm, error: best.error, repeated: best.repeated } };

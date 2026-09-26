@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { distanciaRecorrido, muestrearRuta, tramoRuta, interpretarArchivoRuta, crearGpx, coordenadaValida,
   consultarTiempo, indiceHoraCercana, leerRutasGuardadas, escribirRutasGuardadas, trazarRutaPorPuntos, riesgoTramo, generarRutaCircular,
-  desgloseSuperficies, proporcionRutaRepetida, cumpleSuperficie, esCarreteraAsfaltadaCompleta, haversine } from "../cliente/modelo.js";
+  desgloseSuperficies, proporcionRutaRepetida, cumpleSuperficie, esCarreteraAsfaltadaCompleta, esRutaComarcalCompatible, haversine } from "../cliente/modelo.js";
 
 const browser = new JSDOM("", { url: "https://ridecast.test/" });
 globalThis.DOMParser = browser.window.DOMParser;
@@ -39,11 +39,98 @@ test("montaña: acepta caminos sin superficie explícita y conserva su incertidu
 
 test("generador: HTTP 403/429 detiene las consultas sin agotar los intentos", async () => {
   for (const status of [403,429]) {
-    let calls = 0;
-    globalThis.fetch = async () => { calls++; return {ok:false,status}; };
+    localStorage.clear();
+    let calls = 0, fallback = 0;
+    globalThis.fetch = async url => {
+      if (url.startsWith('https://brouter.de/')) { calls++; return {ok:false,status}; }
+      fallback++; return {ok:false,status};
+    };
     await assert.rejects(generarRutaCircular(coords[0],30,0), /pide esperar/);
     assert.equal(calls,1);
+    assert.equal(fallback,1); // Si el servicio alternativo también limita, no se repite.
   }
+});
+
+test("429 en BRouter: prueba una LR-115 ciclista sin afirmar que su firme esté confirmado", async () => {
+  let primary = 0, alternate = 0;
+  globalThis.fetch = async url => {
+    if (url.startsWith('https://brouter.de/')) { primary++; return {ok:false,status:429}; }
+    alternate++;
+    const stops = new URL(url).pathname.split('/').at(-1).split(';').map(pair => pair.split(',').map(Number));
+    assert.equal(new URL(url).searchParams.get('steps'),'true');
+    const middle = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return Response.json({code:'Ok',routes:[{distance:30000,geometry:{coordinates:[stops[0],middle,stops[1]]},
+      legs:[{steps:[{ref:'LR-115',distance:24000},{name:'Calle de acceso',distance:6000}]}]}]});
+  };
+  const route = await generarRutaCircular(coords[0],30,90);
+  assert.equal(primary,1); assert.equal(alternate,2);
+  assert.equal(route.generation.shape,'linear');
+  assert.equal(route.generation.comarcal,true);
+  assert.equal(route.generation.needsReview,true);
+  assert.equal(route.generation.pavedRoadVerified,false);
+  assert.equal(route.generation.surfaces.unknown,1);
+  await generarRutaCircular(coords[0],30,90);
+  assert.equal(primary,1); assert.equal(alternate,4); // Respeta la pausa sin repetir BRouter.
+});
+
+test("429 en BRouter: busca primero un circuito regional sin surface", async () => {
+  let alternate = 0;
+  globalThis.fetch = async url => {
+    if (url.startsWith('https://brouter.de/')) return {ok:false,status:429};
+    alternate++;
+    const stops = new URL(url).pathname.split('/').at(-1).split(';').map(pair => pair.split(',').map(Number));
+    return Response.json({code:'Ok',routes:[{distance:30000,geometry:{coordinates:stops},
+      legs:[{steps:[{ref:'LR-115',distance:30000}]}]}]});
+  };
+  const route = await generarRutaCircular(coords[0],30,90);
+  assert.equal(alternate,1);
+  assert.equal(route.generation.shape,'circular');
+  assert.equal(route.generation.needsReview,true);
+  assert.deepEqual(route.coords[0],route.coords.at(-1));
+});
+
+test("salida indicada en La Rioja: descarta el circuito largo y marca la LR-115 lineal sin surface", async () => {
+  const start = {lat:42.22603,lon:-2.10086};
+  let brouter = 0, regional = 0;
+  globalThis.fetch = async url => {
+    if (url.startsWith('https://brouter.de/')) { brouter++; return {ok:false,status:429}; }
+    regional++;
+    const stops = new URL(url).pathname.split('/').at(-1).split(';').map(pair => pair.split(',').map(Number));
+    if (stops.length > 2) return Response.json({code:'Ok',routes:[{
+      distance:35051.3,geometry:{coordinates:stops},legs:[{steps:[{ref:'LR-115',distance:24000},{ref:'LR-584',distance:11051.3}]}]
+    }]});
+    const midpoint = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return Response.json({code:'Ok',routes:[{
+      distance:28370,geometry:{coordinates:[stops[0],midpoint,stops[1]]},
+      legs:[{steps:[{ref:'LR-584',distance:4000},{ref:'LR-115',distance:18000},{ref:'LR-495',distance:6370}]}]
+    }]});
+  };
+  const route = await generarRutaCircular(start,30,90,{surface:'asphalt'});
+  assert.equal(brouter,1);
+  assert.equal(regional,2); // El circuito se intenta antes que la alternativa lineal.
+  assert.equal(route.distance,28.37);
+  assert.equal(route.generation.shape,'linear');
+  assert.ok(haversine(start,route.coords[0]) < 0.01);
+  assert.ok(haversine(start,route.coords.at(-1)) > 20);
+  assert.equal(route.generation.comarcal,true);
+  assert.equal(route.generation.needsReview,true);
+  assert.equal(route.generation.pavedRoadVerified,false);
+  assert.deepEqual(route.generation.surfaces,{paved:0,unpaved:0,unknown:1});
+});
+
+test("sin surface: acepta otra regional ciclista, pero no una carretera nacional", async () => {
+  let ref = 'NA-134';
+  globalThis.fetch = async url => {
+    if (url.startsWith('https://brouter.de/')) return {ok:false,status:429};
+    const stops = new URL(url).pathname.split('/').at(-1).split(';').map(pair => pair.split(',').map(Number));
+    return Response.json({code:'Ok',routes:[{distance:30000,geometry:{coordinates:[stops[0],stops[1]]},
+      legs:[{steps:[{ref,distance:30000}]}]}]});
+  };
+  const regional = await generarRutaCircular(coords[0],30,90);
+  assert.equal(regional.generation.comarcal,true);
+  assert.equal(regional.generation.pavedRoadVerified,false);
+  ref = 'N-232';
+  await assert.rejects(generarRutaCircular(coords[0],30,90), /pide esperar/);
 });
 
 test("generador: acota el radio cuando sobrepasa la distancia por ambos lados", async () => {
@@ -78,6 +165,121 @@ test("generador: refina la distancia con el perfil de asfalto y cierra el circui
   assert.deepEqual(route.coords[0], route.coords.at(-1));
   assert.equal(calls, 2);
   assert.ok(route.generation.error < 0.01);
+});
+
+test("carretera: si no hay circuito confirmado, genera una ruta lineal 100 % pavimentada", async () => {
+  let circular = 0, linear = 0;
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    if (stops.length > 2) { circular++; return surfaceResponse(stops,30000,'ground'); }
+    linear++;
+    const middle = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return surfaceResponse([stops[0],middle,stops[1]],30000,linear === 1 ? 'ground' : 'asphalt');
+  };
+  const route = await generarRutaCircular(coords[0],30,90,{allowUncertain:true});
+  assert.equal(circular,3);
+  assert.equal(linear,2);
+  assert.equal(route.generation.shape,'linear');
+  assert.equal(route.generation.pavedRoadVerified,true);
+  assert.equal(route.generation.surfaces.paved,1);
+  assert.notDeepEqual(route.coords[0],route.coords.at(-1));
+});
+
+test("carretera: nunca ofrece un candidato con firme desconocido", async () => {
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return surfaceResponse(stops.length === 2 ? [stops[0],stops[0],stops[1]] : stops,30000,'ground');
+  };
+  await assert.rejects(generarRutaCircular(coords[0],30,90,{allowUncertain:true}),/Marca otro punto/);
+});
+
+test("carretera: usa una comarcal sin surface como alternativa claramente pendiente de revisión", async () => {
+  let linear = 0;
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    if (stops.length > 2) return surfaceResponse(stops,30000,'ground');
+    linear++;
+    const mid = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return {ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:[stops[0],mid,stops[1]]},properties:{
+      'track-length':'33000',messages:[['Distance','WayTags'],['33000','highway=secondary']]
+    }}]})};
+  };
+  const route = await generarRutaCircular(coords[0],30,90);
+  assert.equal(linear,3);
+  assert.equal(route.generation.comarcal,true);
+  assert.equal(route.generation.shape,'linear');
+  assert.equal(route.generation.needsReview,true);
+  assert.equal(route.generation.surfaces.unknown,1);
+  assert.equal(route.generation.pavedRoadVerified,false);
+});
+
+test("carretera: prefiere un circuito comarcal sin surface a una ruta lineal", async () => {
+  let circular = 0, linear = 0;
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    if (stops.length === 2) { linear++; return surfaceResponse(stops,30000); }
+    circular++;
+    return {ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:stops},properties:{
+      'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=secondary ref=NA-134']]
+    }}]})};
+  };
+  const route = await generarRutaCircular(coords[0],30,90);
+  assert.equal(circular,3);
+  assert.equal(linear,0);
+  assert.equal(route.generation.shape,'circular');
+  assert.equal(route.generation.comarcal,true);
+  assert.equal(route.generation.needsReview,true);
+  assert.equal(route.generation.pavedRoadVerified,false);
+  assert.deepEqual(route.coords[0],route.coords.at(-1));
+});
+
+test("carretera: rechaza un circuito regional con tierra explícita", async () => {
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return {ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:stops},properties:{
+      'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=secondary ref=NA-134 surface=gravel']]
+    }}]})};
+  };
+  await assert.rejects(generarRutaCircular(coords[0],30,90),/Marca otro punto/);
+});
+
+test("carretera: usa los puntos marcados en orden y el rumbo elegido", async () => {
+  const start = coords[0], via = {lat:start.lat + 0.04,lon:start.lon};
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return surfaceResponse(stops,30000);
+  };
+  const route = await generarRutaCircular(start,30,0,{waypoints:[via]});
+  assert.equal(route.generation.surface,'asphalt');
+  assert.ok(route.coords.some(p => haversine(p,via) < 0.01));
+  assert.deepEqual(route.coords[0],route.coords.at(-1));
+});
+
+test("carretera: si no hay ruta alternativa, vuelve por la misma carretera confirmada", async () => {
+  const start = coords[0];
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    if (stops.length > 2) return surfaceResponse(stops,30000,'ground');
+    const mid = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return surfaceResponse([stops[0],mid,stops[1]],15000,'asphalt');
+  };
+  const route = await generarRutaCircular(start,30,90);
+  assert.equal(route.generation.shape,'out-and-back');
+  assert.equal(route.distance,30);
+  assert.equal(route.generation.surfaces.paved,1);
+  assert.deepEqual(route.coords, [...route.coords.slice(0,3), ...route.coords.slice(0,2).reverse()]);
+});
+
+test("carretera: no usa un regreso de firme incierto o sentido no confirmado", async () => {
+  const start = coords[0];
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    if (stops.length > 2) return surfaceResponse(stops,30000,'ground');
+    const mid = [(stops[0][0]+stops[1][0])/2,(stops[0][1]+stops[1][1])/2];
+    return surfaceResponse([stops[0],mid,stops[1]],15000,
+      Math.abs(stops[0][0]-start.lon)<0.000001 ? 'asphalt' : 'ground');
+  };
+  await assert.rejects(generarRutaCircular(start,30,90),/Marca otro punto/);
 });
 
 test("generador: el modo tierra usa MTB y conserva la preferencia", async () => {
@@ -123,6 +325,20 @@ test("asfalto: exige carretera en todos los tramos, incluso si el sendero está 
   assert.equal(cumpleSuperficie({paved:1,unpaved:0,unknown:0},'asphalt',true),true);
 });
 
+test("comarcal: requiere predominio secondary/tertiary y rechaza tierra conocida", () => {
+  const rows = last => [['Distance','WayTags'],['600','highway=secondary'],['400',last]];
+  assert.equal(esRutaComarcalCompatible(rows('highway=residential surface=asphalt'),1000),true);
+  assert.equal(esRutaComarcalCompatible(rows('highway=tertiary surface=gravel'),1000),false);
+  assert.equal(esRutaComarcalCompatible(rows('highway=path surface=asphalt'),1000),false);
+  assert.equal(esRutaComarcalCompatible([['Distance','WayTags'],['1000','highway=residential']],1000),false);
+  assert.equal(esRutaComarcalCompatible(rows('highway=residential surface=asphalt'),1001),true);
+  assert.equal(esRutaComarcalCompatible(rows('highway=residential surface=asphalt'),1010),false);
+  assert.equal(esRutaComarcalCompatible([['Distance','WayTags'],['700','highway=primary ref=LR-115'],['300','highway=residential surface=asphalt']],1000),true);
+  assert.equal(esRutaComarcalCompatible([['Distance','WayTags'],['700','highway=primary ref=NA-134'],['300','highway=residential surface=asphalt']],1000),true);
+  assert.equal(esRutaComarcalCompatible([['Distance','WayTags'],['700','highway=primary ref=N-232'],['300','highway=residential surface=asphalt']],1000),false);
+  assert.equal(esRutaComarcalCompatible([['Distance','WayTags'],['700','highway=primary ref=LR-115 surface=ground'],['300','highway=residential surface=asphalt']],1000),false);
+});
+
 test("generador: descarta asfalto en modo tierra aunque la distancia sea exacta", async () => {
   let calls = 0;
   globalThis.fetch = async url => {
@@ -157,9 +373,14 @@ test("generador: rechaza rutas sin información del firme", async () => {
   await assert.rejects(generarRutaCircular(coords[0],30,0,{surface:'dirt'}), /60 %/);
 });
 
-test("preferencia: devuelve un candidato con firme desconocido conservando la incertidumbre", async () => {
-  globalThis.fetch = async url => surfaceResponse(new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number)),30000,'unknown');
-  const route = await generarRutaCircular(coords[0],30,0,{surface:'asphalt',allowUncertain:true});
+test("montaña: devuelve un candidato con firme desconocido conservando la incertidumbre", async () => {
+  globalThis.fetch = async url => {
+    const stops = new URL(url).searchParams.get('lonlats').split('|').map(p=>p.split(',').map(Number));
+    return {ok:true,json:async()=>({features:[{geometry:{type:'LineString',coordinates:stops},properties:{
+      'track-length':'30000',messages:[['Distance','WayTags'],['30000','highway=residential']]
+    }}]})};
+  };
+  const route = await generarRutaCircular(coords[0],30,0,{surface:'dirt',allowUncertain:true});
   assert.equal(route.generation.needsReview,true);
   assert.equal(route.generation.surfaces.unknown,1);
   assert.equal(route.generation.pavedRoadVerified,false);
@@ -181,7 +402,7 @@ test("preferencia asfalto: no convierte tierra conocida en candidato", async () 
       'track-length':'30000',messages:[['Distance','WayTags'],['1000','surface=ground'],['29000','highway=residential']]
     }}]})};
   };
-  await assert.rejects(generarRutaCircular(coords[0],30,0,{allowUncertain:true}),/No se pudo verificar/);
+  await assert.rejects(generarRutaCircular(coords[0],30,0,{allowUncertain:true}),/Marca otro punto/);
 });
 
 test("repetición: detecta una vuelta por el mismo tramo y no penaliza un circuito", () => {
@@ -196,7 +417,7 @@ test("generador: valida límites y no inventa geometría si el servicio falla", 
   let calls = 0;
   globalThis.fetch = async () => { calls++; throw new Error('Sin servicio'); };
   await assert.rejects(generarRutaCircular(coords[0],30,0), /servicio de rutas/);
-  assert.equal(calls,6);
+  assert.equal(calls,4); // Tres intentos BRouter y una alternativa ciclista.
 });
 
 test("generador: rechaza circuitos lejos de la salida o sin cerrar y respeta cancelación", async () => {

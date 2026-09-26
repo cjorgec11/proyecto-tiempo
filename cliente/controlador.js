@@ -1,7 +1,9 @@
 // Controlador: coordina el modelo, la vista y las operaciones asíncronas.
 import { registrarRuta } from "./historial-rutas.js";
 import { redVerificada } from "./red-verificada.js";
+import { verificarSentidoExportacion } from "./verificar-exportacion.js";
 import { generarCircuitoVerificado } from "./rutas-verificadas.js";
+import { localidadesDelRecorrido, nombreConLocalidades } from "./localidades.js";
 import { cuentaActual, rutasCuenta, guardarRutaEnServidor, eliminarRutaEnServidor, rutaEnServidor, actualizarCuenta } from "./cuenta.js";
 import { bearing, interpretarArchivoRuta, distanciaRecorrido, leerRutasGuardadas, trazarRutaPorPuntos,
   generarRutaCircular, leerSugerencias, guardarSugerencia, leerRutasLocales,
@@ -12,10 +14,55 @@ import { dom, descargarGpx, dibujarRuta, encuadrarRuta, iniciarIconos, iniciarMa
   mostrarRutasGuardadas, mostrarResumen, mostrarCronologia, mostrarPuntosPaso, mostrarPuntosImportados, fijarVistaPreviaRuta,
   cambiarSeccion, mostrarEstado, alternarTema, alternarPantallaCompletaPlanificador, actualizarIntervaloMuestras } from "./vista.js";
 
-let previewTimer, previewToken = 0, calculationToken = 0, importToken = 0, activeSavedId = null;
+let previewTimer, previewToken = 0, calculationToken = 0, importToken = 0, activeSavedId = null, autoGuestId = null;
 let garminFile = null;
 let locationRequest = 0;
 let generationController = null;
+let nameController = null, pendingName = null, currentAutoName = null;
+
+function nombrarRecorrido(coords, base, generated = false) {
+  nameController?.abort();
+  const controller = nameController = new AbortController();
+  const token = previewToken;
+  const route = generated ? state.importedRoute : null;
+  const promise = localidadesDelRecorrido(coords, {signal:controller.signal}).then(async places => {
+    if (controller.signal.aborted || token !== previewToken || (generated && state.importedRoute !== route) || !places.length) return;
+    const name = nombreConLocalidades(base, places);
+    currentAutoName = name;
+    if (generated) {
+      const input = document.querySelector("#generatedRouteName");
+      if (input.value === base) {
+        route.name = name;
+        input.value = name;
+        dom.routeSource.textContent = name;
+        document.querySelector("#forecastTitle").textContent = name;
+        if (dom.importStatus.textContent.startsWith(`${base} · `)) dom.importStatus.textContent = dom.importStatus.textContent.replace(base, name);
+        const result = document.querySelector("#generatorResult");
+        if (result.textContent.startsWith(`${base} · `)) result.textContent = result.textContent.replace(base, name);
+      }
+    }
+    if (!generated) {
+      if (dom.routeSource.textContent.startsWith(`${state.currentDistance.toFixed(1)} km`)) dom.routeSource.textContent += ` · ${places.join(" · ")}`;
+    }
+    state.currentStartName = places[0];
+    state.currentEndName = coords.length > 1 && Math.abs(coords[0].lat - coords.at(-1).lat) < 0.001
+      && Math.abs(coords[0].lon - coords.at(-1).lon) < 0.001 ? places[0] : places.at(-1);
+    if (dom.saveName.value === base) dom.saveName.value = name;
+    if (!generated && activeSavedId && rutasCuenta() === null) {
+      const routes = leerRutasLocales();
+      const saved = routes.find(item => item.id === activeSavedId);
+      if (saved?.name === base) {
+        saved.name = name;
+        saved.startName = state.currentStartName;
+        saved.endName = state.currentEndName;
+        escribirRutasGuardadas(routes);
+        mostrarColeccion();
+      }
+    }
+  }).catch(() => {});
+  pendingName = {base,promise};
+  promise.finally(() => { if (pendingName?.promise === promise) pendingName = null; });
+}
 
 function detenerGeneracion() {
   generationController?.abort();
@@ -32,6 +79,7 @@ async function generarRuta(event) {
   if (!document.querySelector("#generatorForm").reportValidity()) return;
   const start = state.waypoints[0] || state.currentRouteCoords[0];
   const result = document.querySelector("#generatorResult");
+  document.querySelector("#generatorDetails").hidden = true;
   if (!start) { result.textContent = "Elige una salida en el mapa o pulsa el botón de ubicación."; return; }
   if (state.waypoints.some(point => point.snapping)) { result.textContent = "Espera a que se ajusten los puntos al mapa."; return; }
   detenerGeneracion();
@@ -51,23 +99,29 @@ async function generarRuta(event) {
     const generate = verified ? (...args) => generarCircuitoVerificado(redVerificada, ...args) : generarRutaCircular;
     const route = await generate({lat:start.lat, lon:start.lon}, target, heading, {
       surface: document.querySelector("#routeSurface").value,
+      waypoints: state.waypoints.slice(1).map(({lat,lon}) => ({lat,lon})),
+      enforceHeading: direction !== "auto",
       allowUncertain: !verified,
       signal: controller.signal,
-      onProgress: (attempt, total) => { result.textContent = verified ? "Buscando un circuito en la red de tramos revisados…" : `Ajustando distancia y trazado · Intento ${attempt} de ${total}`; }
+      onProgress: (attempt, total, shape) => { result.textContent = verified ? "Buscando en la red revisada…" : `Buscando ${shape || "circuito"} · ${attempt}/${total}`; }
     });
     if (controller.signal.aborted) return;
-    const name = `${route.generation.needsReview ? "Candidato circular" : "Circular"} ${route.distance.toFixed(1)} km`;
-    usarRutaImportada({coords:route.coords, name, startName:"Salida", endName:"Regreso", generation:route.generation});
+    const name = `${route.generation.comarcal ? route.generation.shape === "linear" ? "Regional o comarcal lineal" : "Regional o comarcal circular" : route.generation.shape === "out-and-back" ? "Ida y vuelta" : route.generation.shape === "linear" ? "Lineal" : route.generation.needsReview ? "Candidato circular" : "Circular"} ${route.distance.toFixed(1)} km`;
+    usarRutaImportada({coords:route.coords, name, startName:"Salida", endName:route.generation.shape === "linear" ? "Llegada" : "Regreso", generation:route.generation});
     document.querySelector("#generatedRouteSave").hidden = false;
     document.querySelector("#generatedRouteName").value = name;
+    nombrarRecorrido(route.coords,name,true);
     dom.importStatus.textContent = "";
     const info = route.generation;
     const surfaces = info.surfaces;
-    const breakdown = surfaces ? `Pavimentado ${Math.round(surfaces.paved * 100)} %, tierra/grava ${Math.round(surfaces.unpaved * 100)} %, sin datos ${Math.round(surfaces.unknown * 100)} %.${surfaces.inferredUnpaved ? ` Del total, ${Math.round(surfaces.inferredUnpaved * 100)} % se estima por el tipo de camino; no tiene superficie explícita.` : ""}` : "Firme sin detalle disponible.";
-    result.textContent = `${name} · Objetivo ${target} km · Desviación ${(info.error * 100).toFixed(1)} % · Repetición estimada ${(info.repeated * 100).toFixed(0)} %. Preferencia: ${info.surface === "dirt" ? "montaña" : "asfalto"}. ${breakdown}${surfaces?.unknownOffroad ? ` El ${Math.round(surfaces.unknownOffroad * 100)} % del recorrido son caminos o senderos con firme sin confirmar; no se garantiza que sean de tierra.` : ""}`;
-    if (info.needsReview) result.textContent = `Candidato para revisar: no se ha podido confirmar el firme solicitado. ${result.textContent}`;
+    const details = document.querySelector("#generatorDetails");
+    const breakdown = surfaces ? `Pavimentado ${Math.round(surfaces.paved * 100)} %, tierra/grava ${Math.round(surfaces.unpaved * 100)} %, sin datos ${Math.round(surfaces.unknown * 100)} %.${surfaces.inferredUnpaved ? ` Tierra estimada por tipo de camino: ${Math.round(surfaces.inferredUnpaved * 100)} %.` : ""}` : "Firme sin detalle disponible.";
+    result.textContent = `${name} · ${info.needsReview ? "Firme por revisar" : info.surface === "asphalt" ? "100 % carretera pavimentada según el mapa" : "Montaña"}`;
+    details.hidden = false;
+    details.open = false;
+    document.querySelector("#generatorMetrics").textContent = `Objetivo ${target} km · Desviación ${(info.error * 100).toFixed(1)} % · Repetición ${(info.repeated * 100).toFixed(0)} %. ${breakdown}${surfaces?.unknownOffroad ? ` Caminos sin firme confirmado: ${Math.round(surfaces.unknownOffroad * 100)} %.` : ""}`;
     if (info.verification) {
-      result.textContent += ` Firme revisado: comprobación más antigua ${info.verification.checkedAt}; válido hasta ${info.verification.validUntil}. Salida en la red a ${Math.round(info.verification.startOffsetMeters)} m del punto elegido; ese acceso no forma parte del circuito. No certifica cambios posteriores ni el estado actual del camino.`;
+      document.querySelector("#generatorMetrics").textContent += ` Revisión desde ${info.verification.checkedAt}, vigente hasta ${info.verification.validUntil}. La red comienza a ${Math.round(info.verification.startOffsetMeters)} m de la salida indicada.`;
       const sources = document.querySelector("#verificationSources");
       for (const entry of info.verification.evidence) {
         const item = document.createElement("li");
@@ -76,7 +130,7 @@ async function generarRuta(event) {
       }
       document.querySelector("#verificationEvidence").hidden = false;
     }
-    mostrarEstado(info.needsReview ? "Candidato generado. Revisa los tramos sin datos antes de utilizarlo; el firme no está garantizado." : "Ruta circular creada. Ya puedes calcular el tiempo, guardarla o compartirla con Garmin Connect.");
+    mostrarEstado(info.needsReview ? "Tramo de firme sin confirmar. Revisa la ruta regional o comarcal antes de usarla." : `${info.shape === "out-and-back" ? "Ida y vuelta" : info.shape === "linear" ? "Ruta lineal" : "Circuito"} creado. Ya puedes guardarlo o calcular el tiempo.`);
   } catch (error) {
     if (!controller.signal.aborted) result.textContent = error.message;
   } finally {
@@ -159,6 +213,20 @@ function mostrarColeccion() {
   catch (error) { mostrarEstado(error.message, "error"); }
 }
 
+function guardarRutaManualVisitante(coords, name) {
+  if (rutasCuenta() !== null || coords.length < 2) return;
+  try {
+    const routes = leerRutasLocales();
+    const id = autoGuestId ||= activeSavedId || crypto.randomUUID();
+    const previous = routes.find(route => route.id === id);
+    const route = { id, name, coords, startName: state.currentStartName, endName: state.currentEndName,
+      distance: distanciaRecorrido(coords), createdAt: previous?.createdAt || new Date().toISOString() };
+    escribirRutasGuardadas([route, ...routes.filter(item => item.id !== id)]);
+    activeSavedId = id;
+    mostrarColeccion();
+  } catch (error) { mostrarEstado(error.message, "error"); }
+}
+
 function busy(active) {
   document.querySelectorAll('#rideForm button[type="submit"], button[form="rideForm"]').forEach(button => {
     button.disabled = active;
@@ -179,6 +247,9 @@ function invalidarPrevision() {
 }
 
 function invalidarRuta() {
+  nameController?.abort();
+  pendingName = null;
+  currentAutoName = null;
   document.querySelector("#verificationSources").replaceChildren();
   document.querySelector("#verificationEvidence").hidden = true;
   detenerGeneracion();
@@ -187,6 +258,7 @@ function invalidarRuta() {
   document.querySelector("#saveGeneratedRoute span").textContent = "Guardar ruta";
   document.querySelector("#generatedSaveStatus").textContent = "Se guardará en Mis rutas de este navegador.";
   document.querySelector("#generatorResult").textContent = "";
+  document.querySelector("#generatorDetails").hidden = true;
   ++importToken;
   ++previewToken;
   clearTimeout(previewTimer);
@@ -212,9 +284,16 @@ function programarVistaPrevia() {
     try {
       const route = await trazarRutaPorPuntos(points);
       if (token !== previewToken) return;
+      // El trazado que se ve en el mapa también es la ruta actual guardable.
+      state.currentRouteCoords = route.coords;
+      state.currentDistance = route.distance;
+      state.currentStartName = "Salida";
+      state.currentEndName = "Llegada";
       fijarVistaPreviaRuta(route.coords);
       dom.routeSource.textContent = `${route.distance.toFixed(1)} km · Bicicleta`;
-      registrarRuta("planned", route.coords, route.distance, "Ruta dibujada");
+      guardarRutaManualVisitante(route.coords, "Ruta dibujada");
+      nombrarRecorrido(route.coords, "Ruta dibujada");
+      registrarRuta("planned", route.coords, route.distance, "Ruta dibujada", [], { manual: true });
     } catch (error) {
       if (token === previewToken) mostrarEstado(error.message, "error");
     }
@@ -243,6 +322,7 @@ function quitarPuntoPaso(index) {
 }
 
 function limpiarRuta() {
+  autoGuestId = null;
   garminFile = null;
   const garminDialog = document.querySelector("#garminModal");
   if (garminDialog.open) garminDialog.close();
@@ -264,9 +344,8 @@ function conectarEventos() {
     const count = redVerificada.tramos.filter(t => t.checkedAt <= today && t.validUntil >= today
       && (surface === "asphalt" ? t.surface === "asphalt" : t.surface !== "asphalt")).length;
     document.querySelector("#terrainCoverage").textContent = !verified
-      ? "Busca rutas por preferencia. Si faltan datos, puede ofrecer un candidato para revisar; no garantiza el firme."
-      : count ? `${count} tramos revisados de este firme disponibles. La cobertura puede no permitir un circuito con tu salida y distancia.`
-        : "Sin cobertura verificada para este firme. Elige Preferencia de terreno para generar candidatos o incorpora tramos revisados.";
+      ? surface === "asphalt" ? "Carretera: solo pavimento confirmado en el mapa." : "Montaña: algunos tramos pueden requerir revisión."
+      : count ? `${count} tramos revisados disponibles.` : "Sin tramos revisados de este firme.";
   };
   updateCoverage();
   for (const id of ["terrainAssurance", "routeSurface"]) document.querySelector("#" + id).addEventListener("change", updateCoverage);
@@ -287,8 +366,8 @@ function conectarEventos() {
   }
   document.querySelector("#useVerifiedStart").disabled = !starts.size;
   document.querySelector("#verifiedCoverage").textContent = starts.size
-    ? `${redVerificada.tramos.length} tramos en la biblioteca local. Solo se usan revisiones vigentes del firme elegido.`
-    : "Arnedo: todavía no hay tramos con revisión vigente. El modo verificado no generará rutas hasta incorporar comprobaciones reales.";
+    ? `${redVerificada.tramos.length} tramos registrados; se usan los vigentes.`
+    : "Sin tramos vigentes en la biblioteca.";
   document.querySelector("#useVerifiedStart").addEventListener("click", () => {
     const point = starts.get(verifiedStart.value);
     if (!point) return;
@@ -309,7 +388,10 @@ function conectarEventos() {
     mostrarEstado("Marca los puntos del recorrido en el mapa.");
   });
   for (const id of ["quickImport","libraryImport"]) document.getElementById(id).addEventListener("click", () => dom.routeFile.click());
-  document.querySelector("#librarySave").addEventListener("click", () => focusSection("saveCurrentSection","saveName"));
+  document.querySelector("#librarySave").addEventListener("click", async () => {
+    if (!state.currentRouteCoords.length) return mostrarEstado("Primero crea o importa una ruta.", "error");
+    await guardarRutaActual();
+  });
   const suggestionStatus = document.querySelector("#suggestionStatus");
   try { mostrarSugerencias(leerSugerencias()); } catch { suggestionStatus.textContent = "No se pueden leer las sugerencias. Los datos se han conservado."; document.querySelector("#exportarSugerencias").disabled = true; }
   document.querySelector("#suggestionForm").addEventListener("submit", event => {
@@ -428,11 +510,11 @@ function conectarEventos() {
   speedInput.addEventListener("input", updateSpeedButtons);
   updateSpeedButtons();
   document.querySelector("#encuadrarRuta").addEventListener("click", encuadrarRuta);
-  document.querySelector("#saveForecast").addEventListener("click", () => {
+  document.querySelector("#saveForecast").addEventListener("click", async () => {
     if (!state.currentRouteCoords.length) return mostrarEstado("Primero crea o importa un recorrido.", "error");
     cambiarSeccion("library");
-    dom.saveName.value = nombreRuta();
-    dom.saveName.focus();
+    if (!dom.saveName.value.trim()) dom.saveName.value = nombreRuta();
+    await guardarRutaActual();
   });
   dom.undoWaypoint.addEventListener("click", () => { if (state.waypoints.length) quitarPuntoPaso(state.waypoints.length - 1); });
   dom.clearWaypoints.addEventListener("click", limpiarRuta);
@@ -482,7 +564,8 @@ function usarRutaImportada(route, id = null) {
   mostrarPrevision();
   cambiarSeccion("plan");
   fijarVistaPreviaRuta(route.coords, true);
-  registrarRuta("planned", route.coords, state.currentDistance, route.name);
+  if (!route.generation) guardarRutaManualVisitante(route.coords, route.name);
+  registrarRuta("planned", route.coords, state.currentDistance, route.name, [], { manual: !route.generation });
 }
 
 async function procesarArchivoRuta(event) {
@@ -507,13 +590,19 @@ async function procesarArchivoRuta(event) {
 }
 
 function nombreRuta() {
-  return state.importedRoute?.name || "Ruta " + new Date().toLocaleDateString("es-ES");
+  return state.importedRoute?.name || currentAutoName || "Ruta " + new Date().toLocaleDateString("es-ES");
 }
 
 async function guardarRutaActual() {
   if (!state.currentRouteCoords.length) return mostrarEstado("Calcula o importa una ruta antes de guardarla.", "error");
   const token = previewToken;
   try {
+    if (pendingName && (dom.saveName.value.trim() === pendingName.base || !dom.saveName.value.trim())) {
+      const expected = pendingName.base;
+      await pendingName.promise;
+      if (token !== previewToken) return false;
+      if ((!dom.saveName.value.trim() || dom.saveName.value.trim() === expected) && currentAutoName) dom.saveName.value = currentAutoName;
+    }
     const routes = leerRutasGuardadas();
     const previous = routes.find((route) => route.id === activeSavedId);
     const saved = {
@@ -552,6 +641,7 @@ async function accionRutaGuardada(event) {
       usarRutaImportada(route, route.id);
       mostrarEstado(route.generation?.needsReview ? "Candidato cargado: revisa el firme sin confirmar antes de utilizarlo." : "Ruta cargada. Revisa la fecha y calcula una previsión actualizada.");
     } else if (button.dataset.action === "export") {
+      await verificarSentidoExportacion(route.coords);
       descargarGpx(route.name, route.coords);
     } else if (button.dataset.action === "garmin") {
       abrirGarmin(route);
@@ -565,9 +655,17 @@ async function accionRutaGuardada(event) {
   } catch (error) { mostrarEstado(error.message, "error"); }
 }
 
-function exportarRutaActual() {
+async function exportarRutaActual() {
   if (!state.currentRouteCoords.length) return mostrarEstado("Primero calcula o importa una ruta.", "error");
-  descargarGpx(dom.saveName.value.trim() || nombreRuta(), state.currentRouteCoords);
+  const coords = state.currentRouteCoords, token = previewToken;
+  const name = dom.saveName.value.trim() || nombreRuta();
+  dom.exportRoute.disabled = true;
+  try {
+    await verificarSentidoExportacion(coords);
+    if (token !== previewToken || coords !== state.currentRouteCoords) return;
+    descargarGpx(name, coords);
+  } catch (error) { mostrarEstado(error.message, "error"); }
+  finally { dom.exportRoute.disabled = false; }
 }
 
 async function abrirGarmin(savedRoute) {
@@ -585,6 +683,8 @@ async function abrirGarmin(savedRoute) {
       if (token !== previewToken) return;
       coords = route.coords;
     }
+    await verificarSentidoExportacion(coords);
+    if (token !== previewToken) return;
     // Preparar antes del segundo clic conserva la activación necesaria para compartir en móvil.
     garminFile = crearArchivoGpx(name, coords);
     document.querySelector("#garminRouteName").textContent = name;
@@ -608,8 +708,11 @@ async function exportarRutaPlanificada() {
     if (token !== previewToken) return;
     state.currentRouteCoords = route.coords;
     state.currentDistance = route.distance;
+    await verificarSentidoExportacion(route.coords);
+    if (token !== previewToken) return;
     descargarGpx(nombreRuta(), route.coords);
-    registrarRuta("planned", route.coords, route.distance, nombreRuta());
+    guardarRutaManualVisitante(route.coords, nombreRuta());
+    registrarRuta("planned", route.coords, route.distance, nombreRuta(), [], { manual: true });
     mostrarEstado("GPX exportado.");
   } catch (error) {
     if (token === previewToken) mostrarEstado(error.message, "error");
@@ -642,12 +745,13 @@ async function calculate(event) {
     mostrarPrevision();
     if (!imported) fijarVistaPreviaRuta(route.coords);
     const samples = muestrearRuta(route.coords, count);
-    registrarRuta("planned", route.coords, route.distance, imported?.name || "Ruta planificada", [], { departure: departure.toISOString(), speed });
+    if (!imported?.generation) guardarRutaManualVisitante(route.coords, imported?.name || "Ruta planificada");
+    registrarRuta("planned", route.coords, route.distance, imported?.name || "Ruta planificada", [], { departure: departure.toISOString(), speed, manual: !imported?.generation });
     mostrarEstado("Consultando el tiempo a la hora de paso por cada punto…");
     const segments = await consultarTiempo(samples, departure, route.distance, speed);
     if (token !== calculationToken) return;
     state.currentSegments = segments;
-    registrarRuta("forecast", route.coords, route.distance, imported?.name || "Previsión de ruta", segments, { departure: departure.toISOString(), speed });
+    registrarRuta("forecast", route.coords, route.distance, imported?.name || "Previsión de ruta", segments, { departure: departure.toISOString(), speed, manual: !imported?.generation });
     state.currentRideBearing = bearing(route.coords[0], route.coords.at(-1));
     mostrarResumen(route.distance, state.currentDuration, segments, state.currentRideBearing);
     cambiarSeccion("forecast");

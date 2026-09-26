@@ -3,11 +3,39 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { abrirBaseDatos } from "../servidor/base-local.mjs";
 import { account, gestionarCuenta } from "../servidor/cuentas.mjs";
-import { digest } from "../servidor/criptografia.mjs";
+import { digest, hashContrasena } from "../servidor/criptografia.mjs";
 import { gestionarBiblioteca } from "../servidor/biblioteca.mjs";
 import { gestionarRutas } from "../servidor/rutas.mjs";
 import { gestionarSugerencias } from "../servidor/sugerencias.mjs";
 import { esAdministrador } from "../servidor/autenticacion-administracion.mjs";
+
+test("el administrador activa su cuenta y conserva sus rutas tras volver a entrar", async () => {
+  const DB = abrirBaseDatos(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
+  const password = "test-owner-password";
+  const env = { DB, AUTH_MODE: "disabled", ADMIN_EMAIL: "owner@gmail.com", ADMIN_PASSWORD_HASH: await hashContrasena(password) };
+  const req = (path, data, cookie = "") => new Request("https://ridecast.test" + path, {
+    method: data ? "POST" : "GET", headers: { origin: "https://ridecast.test", "content-type": "application/json", cookie },
+    ...(data ? { body: JSON.stringify(data) } : {}),
+  });
+  try {
+    assert.equal((await gestionarCuenta(req("/api/account/login", { email: env.ADMIN_EMAIL, password: "incorrecta" }), env)).status, 401);
+    assert.equal(await DB.prepare("SELECT * FROM app_users").first(), null);
+    const login = await gestionarCuenta(req("/api/account/login", { email: env.ADMIN_EMAIL, password }), env);
+    assert.equal(login.status, 200);
+    assert.equal((await login.json()).user.admin, true);
+    const firstCookie = login.headers.get("set-cookie").split(";")[0];
+    const route = { id: crypto.randomUUID(), name: "Ruta persistente", coords: [{ lat: 40, lon: -3 }, { lat: 40.1, lon: -3.1 }] };
+    assert.equal((await gestionarBiblioteca(req("/api/library", { action: "save", route }, firstCookie), env)).status, 200);
+    assert.equal((await gestionarCuenta(req("/api/account/logout", {}, firstCookie), env)).status, 200);
+    const again = await gestionarCuenta(req("/api/account/login", { email: env.ADMIN_EMAIL, password }), env);
+    assert.equal(again.status, 200);
+    const secondCookie = again.headers.get("set-cookie").split(";")[0];
+    const saved = await (await gestionarBiblioteca(req("/api/library", null, secondCookie), env)).json();
+    assert.equal(saved.entries.length, 1);
+    assert.equal(saved.entries[0].name, route.name);
+    assert.deepEqual(saved.entries[0].preview, route.coords);
+  } finally { DB.close(); }
+});
 
 test("cuentas D1: registro, verificacion, aislamiento, permisos, reset y revocacion", async () => {
   const DB = abrirBaseDatos(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
