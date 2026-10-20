@@ -19,6 +19,7 @@ La APK resultante queda en `app/build/outputs/apk/release/ridecast-1.0-release.a
 - `app/src/main/assets/` contiene una copia de los archivos web (`index.html`,
   `styles.css`, `app.js`, `js/`). Si actualizas la web, copia los ficheros de
   nuevo antes de compilar.
-- El build de release está firmado con la clave de debug por defecto, suficiente
-  para distribución interna y pruebas. Para Play Store hay que crear un
-  keystore propio y configurar `signingConfigs.release` en `app/build.gradle`.
+- Para firmar el release con un keystore propio, crea `android/keystore.properties`
+  (está en `.gitignore`, no lo subas) con `storeFile`, `storePassword`, `keyAlias`
+  y `keyPassword`. Si no existe, el release se firma con la clave de debug, que
+  solo vale para pruebas internas.

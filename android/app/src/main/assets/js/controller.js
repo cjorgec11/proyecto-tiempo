@@ -250,7 +250,10 @@ async function calculate(event) {
     if (!state.importedRoute) autoSaveRoute();
     setStatus("Listo");
   } catch (error) {
-    dom.timeline.innerHTML = `<div class="error">${error.message || "No se pudo calcular la ruta"}</div>`;
+    const message = document.createElement("div");
+    message.className = "error";
+    message.textContent = error.message || "No se pudo calcular la ruta";
+    dom.timeline.replaceChildren(message);
     drawRoute();
   } finally {
     submitBtn?.classList.remove("loading");

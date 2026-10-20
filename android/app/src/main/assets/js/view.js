@@ -179,6 +179,12 @@ function markerIcon(className, label) {
   return L.divIcon({ className: "", html: `<div class="${className}">${label}</div>`, iconAnchor: [14, 14], popupAnchor: [0, -14] });
 }
 
+function textPopup(text) {
+  const el = document.createElement("span");
+  el.textContent = text;
+  return el;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -267,8 +273,8 @@ export function drawRoute(segments = [], startName = "Salida", endName = "Llegad
       .bindPopup(segmentTooltip(segment, label))
       .addTo(routeLayer);
   });
-  L.marker(segmentLatLngs[0], { icon: markerIcon("endpoint-marker", "Salida") }).bindPopup(startName).addTo(routeLayer);
-  L.marker(segmentLatLngs[segmentLatLngs.length - 1], { icon: markerIcon("endpoint-marker", "Meta") }).bindPopup(endName).addTo(routeLayer);
+  L.marker(segmentLatLngs[0], { icon: markerIcon("endpoint-marker", "Salida") }).bindPopup(textPopup(startName)).addTo(routeLayer);
+  L.marker(segmentLatLngs[segmentLatLngs.length - 1], { icon: markerIcon("endpoint-marker", "Meta") }).bindPopup(textPopup(endName)).addTo(routeLayer);
   setTimeout(() => {
     routeMap.invalidateSize();
     routeMap.fitBounds(L.latLngBounds(routeLatLngs), { padding: [36, 36], maxZoom: 11 });
