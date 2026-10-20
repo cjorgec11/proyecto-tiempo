@@ -17,17 +17,26 @@ import { dom, drawRoute, initPlanMap, initTheme, refreshPlanMap, renderSavedRout
 
 let previewTimer = null;
 let previewToken = 0;
+let planRoute = null;
+
+function planKey() {
+  return `${state.routeMode}|${state.waypoints.map((w) => `${w.lon},${w.lat}`).join(";")}`;
+}
+
 function schedulePlanPreview() {
   if (previewTimer) clearTimeout(previewTimer);
+  // Invalida cualquier peticion en curso: su resultado ya no corresponde a los puntos actuales.
+  const token = ++previewToken;
   if (state.waypoints.length < 2 || state.waypoints.some((w) => w.snapping)) {
     setPlanRoutePreview(null);
     return;
   }
   previewTimer = setTimeout(async () => {
-    const token = ++previewToken;
     try {
+      const key = planKey();
       const route = await routeAcross(state.waypoints, state.routeMode);
       if (token !== previewToken) return;
+      planRoute = { key, coords: route.coords };
       setPlanRoutePreview(route.coords);
     } catch {}
   }, 400);
@@ -64,7 +73,7 @@ async function addWaypoint(lat, lon) {
   dom.routeSource.textContent = state.waypoints.length >= 2 ? "Puntos en el mapa" : "Marca puntos en el mapa";
   renderWaypoints(state.waypoints);
   refreshSamplesFromWaypoints();
-  const snapped = await snapToRoad(lat, lon);
+  const snapped = await snapToRoad(lat, lon, state.routeMode);
   const index = state.waypoints.indexOf(placeholder);
   if (index === -1) return;
   state.waypoints[index] = snapped ? { lat: snapped.lat, lon: snapped.lon } : { lat, lon };
@@ -225,7 +234,10 @@ function saveCurrentRoute() {
     distance: pathDistance(state.currentRouteCoords),
     createdAt: new Date().toISOString(),
   };
-  writeSavedRoutes([saved, ...routes].slice(0, 20));
+  if (!writeSavedRoutes([saved, ...routes].slice(0, 20))) {
+    dom.importStatus.textContent = "No hay espacio para guardar la ruta. Borra alguna ruta guardada.";
+    return;
+  }
   renderSavedRoutes(readSavedRoutes());
   dom.saveName.value = "";
   dom.importStatus.textContent = `${name}: ruta guardada`;
@@ -247,20 +259,22 @@ function handleSavedRouteAction(event) {
 
 async function exportPlanRoute() {
   try {
-    let coords = state.currentRouteCoords;
-    let name = routeDefaultName();
-    if (!coords?.length) {
-      if (state.waypoints.length < 2) {
-        setStatus("Marca al menos dos puntos");
-        return;
-      }
+    if (state.importedRoute) {
+      downloadGpx(state.importedRoute.name, state.importedRoute.coords);
+      return;
+    }
+    if (state.waypoints.length < 2) {
+      setStatus("Marca al menos dos puntos");
+      return;
+    }
+    // Exporta siempre lo que hay marcado ahora en el mapa, no la ultima ruta calculada.
+    let coords = planRoute?.key === planKey() ? planRoute.coords : null;
+    if (!coords) {
       setStatus("Calculando ruta");
-      const route = await routeAcross(state.waypoints, state.routeMode);
-      coords = route.coords;
-      state.currentRouteCoords = coords;
+      coords = (await routeAcross(state.waypoints, state.routeMode)).coords;
       setStatus("Listo");
     }
-    downloadGpx(name, coords);
+    downloadGpx("Ruta planificada", coords);
   } catch (error) {
     setStatus(error.message || "No se pudo exportar");
   }
@@ -305,8 +319,7 @@ function autoSaveRoute() {
     distance: pathDistance(state.currentRouteCoords),
     createdAt: new Date().toISOString(),
   };
-  writeSavedRoutes([saved, ...routes].slice(0, 20));
-  renderSavedRoutes(readSavedRoutes());
+  if (writeSavedRoutes([saved, ...routes].slice(0, 20))) renderSavedRoutes(readSavedRoutes());
 }
 
 async function calculate(event) {
@@ -318,6 +331,8 @@ async function calculate(event) {
   const submitBtn = dom.form.querySelector('button[type="submit"]');
 
   try {
+    if (Number.isNaN(departure.getTime())) throw new Error("Indica una hora de salida valida");
+    if (!(speed > 0)) throw new Error("Indica una velocidad media valida");
     submitBtn?.classList.add("loading");
     setStatus("Buscando");
     dom.timeline.innerHTML = `<div class="empty">Cargando</div>`;
@@ -373,6 +388,7 @@ async function calculate(event) {
     message.textContent = error.message || "No se pudo calcular la ruta";
     dom.timeline.replaceChildren(message);
     drawRoute();
+    setStatus("Error");
   } finally {
     submitBtn?.classList.remove("loading");
   }

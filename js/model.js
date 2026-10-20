@@ -85,8 +85,6 @@ function interpolate(a, b, count) {
   });
 }
 
-const OSRM_BASE = "https://routing.openstreetmap.de/routed-bike";
-
 const ROUTE_PROFILES = {
   mixto: { base: "https://routing.openstreetmap.de/routed-bike", profile: "cycling" },
   carretera: { base: "https://routing.openstreetmap.de/routed-car", profile: "driving" },
@@ -103,9 +101,10 @@ function classifyStep(step) {
   return "road";
 }
 
-export async function snapToRoad(lat, lon) {
+export async function snapToRoad(lat, lon, mode = "mixto") {
+  const cfg = ROUTE_PROFILES[mode] || ROUTE_PROFILES.mixto;
   try {
-    const response = await fetch(`${OSRM_BASE}/nearest/v1/cycling/${lon},${lat}?number=1`);
+    const response = await fetch(`${cfg.base}/nearest/v1/${cfg.profile}/${lon},${lat}?number=1`);
     if (!response.ok) return null;
     const data = await response.json();
     const wp = data.waypoints?.[0];
@@ -178,6 +177,7 @@ export function sampleRoute(points, count) {
   if (points.length <= 1) return points.map((point) => ({ ...point, progress: 0 }));
   const distances = cumulativeDistances(points);
   const total = distances[distances.length - 1];
+  const headingSpan = Math.min(1, total / 20);
   return Array.from({ length: count }, (_, index) => {
     const progress = count === 1 ? 0 : index / (count - 1);
     const target = total * progress;
@@ -188,10 +188,13 @@ export function sampleRoute(points, count) {
     const local = (target - prevDistance) / (nextDistance - prevDistance || 1);
     const a = points[nextIndex - 1];
     const b = points[nextIndex];
+    const from = pointAtDistance(points, distances, Math.max(0, target - headingSpan));
+    const to = pointAtDistance(points, distances, Math.min(total, target + headingSpan));
     return {
       lat: a.lat + (b.lat - a.lat) * local,
       lon: a.lon + (b.lon - a.lon) * local,
       progress,
+      heading: bearing(from, to),
     };
   });
 }
@@ -252,7 +255,7 @@ export function downloadGpx(name, coords) {
   const blob = new Blob([xml], { type: "application/gpx+xml" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const filename = `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
+  const filename = `${(name || "ruta").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`;
   a.href = url;
   a.download = filename;
   document.body.append(a);
@@ -265,7 +268,9 @@ export function parseRouteFile(text) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("El fichero no parece GPX o TCX valido");
-  const gpxPoints = [...doc.querySelectorAll("trkpt, rtept")].map((node) => ({
+  const trackNodes = doc.querySelectorAll("trkpt");
+  const gpxNodes = trackNodes.length ? trackNodes : doc.querySelectorAll("rtept");
+  const gpxPoints = [...gpxNodes].map((node) => ({
     lat: Number(node.getAttribute("lat")),
     lon: Number(node.getAttribute("lon")),
   }));
@@ -279,7 +284,7 @@ export function parseRouteFile(text) {
   if (points.length < 2) throw new Error("La ruta necesita al menos dos puntos");
   return {
     coords: simplifyRoute(points, 600),
-    name: doc.querySelector("trk > name, rte > name, Course > Name")?.textContent?.trim() || "Ruta importada",
+    name: doc.querySelector(trackNodes.length ? "trk > name" : "rte > name, Course > Name")?.textContent?.trim() || "Ruta importada",
   };
 }
 
@@ -321,6 +326,7 @@ export async function weatherFor(points, departure, totalDistance, speed) {
     ].join(","),
     wind_speed_unit: "kmh",
     timezone: "auto",
+    timeformat: "unixtime",
     forecast_days: "7",
   });
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
@@ -331,6 +337,7 @@ export async function weatherFor(points, departure, totalDistance, speed) {
     const arrival = new Date(departure.getTime() + ((totalDistance * point.progress) / speed) * 3600000);
     const block = blocks[index];
     const weatherIndex = nearestHourIndex(block.hourly.time, arrival);
+    if (weatherIndex === -1) throw new Error("La previsión solo cubre desde hoy hasta dentro de 7 días: cambia la hora de salida");
     const hourly = block.hourly;
     return {
       ...point,
@@ -349,20 +356,21 @@ export async function weatherFor(points, departure, totalDistance, speed) {
 
 function nearestHourIndex(times, date) {
   const target = date.getTime();
-  let best = 0;
+  let best = -1;
   let diff = Infinity;
   times.forEach((time, index) => {
-    const nextDiff = Math.abs(new Date(time).getTime() - target);
+    const nextDiff = Math.abs(time * 1000 - target);
     if (nextDiff < diff) {
       best = index;
       diff = nextDiff;
     }
   });
-  return best;
+  return diff <= 3600000 ? best : -1;
 }
 
 export function riskFor(segment, rideBearing) {
-  const angle = Math.abs((((segment.windDirection - rideBearing + 540) % 360) - 180));
+  const heading = Number.isFinite(segment.heading) ? segment.heading : rideBearing;
+  const angle = Math.abs((((segment.windDirection - heading + 540) % 360) - 180));
   const headwind = Math.max(0, segment.wind * Math.cos((angle * Math.PI) / 180));
   const score =
     headwind * 1.25 +
@@ -444,5 +452,10 @@ export function readSavedRoutes() {
 }
 
 export function writeSavedRoutes(routes) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(routes));
+    return true;
+  } catch {
+    return false;
+  }
 }
