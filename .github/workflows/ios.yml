@@ -1,0 +1,50 @@
+name: iOS
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - "index.html"
+      - "styles.css"
+      - "app.js"
+      - "js/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build for simulator (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project RideCast.xcodeproj \
+            -scheme RideCast \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Check bundled web files
+        working-directory: ios
+        run: |
+          app=$(find build/Build/Products -maxdepth 2 -name RideCast.app -type d | head -1)
+          for f in index.html styles.css app.js js/model.js js/view.js js/controller.js; do
+            test -f "$app/$f" || { echo "Missing $f in $app"; exit 1; }
+          done
+          echo "Web files bundled in $app"

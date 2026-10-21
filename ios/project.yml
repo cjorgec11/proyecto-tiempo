@@ -1,0 +1,42 @@
+# Proyecto Xcode generado con XcodeGen (https://github.com/yonaskolb/XcodeGen).
+# Ejecuta `xcodegen` en esta carpeta para crear RideCast.xcodeproj.
+name: RideCast
+options:
+  bundleIdPrefix: com.ridecast
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  RideCast:
+    type: application
+    platform: iOS
+    scheme: {}
+    sources:
+      - path: RideCast
+      # La web se empaqueta directamente desde la raiz del repo: no hay copia que mantener.
+      - path: ../index.html
+        group: Web
+        buildPhase: resources
+      - path: ../styles.css
+        group: Web
+        buildPhase: resources
+      - path: ../app.js
+        group: Web
+        buildPhase: resources
+      - path: ../js
+        group: Web
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ridecast.app
+        PRODUCT_NAME: RideCast
+        INFOPLIST_FILE: RideCast/Info.plist
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO

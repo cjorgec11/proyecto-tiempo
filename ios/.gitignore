@@ -1,0 +1,6 @@
+# Generado por XcodeGen a partir de project.yml
+RideCast.xcodeproj/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
