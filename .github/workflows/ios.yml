@@ -71,3 +71,48 @@ jobs:
             ios-simulador.png
             ios-registro.txt
           if-no-files-found: ignore
+
+  # .ipa sin firmar para instalar en un iPhone con Sideloadly o AltStore,
+  # que lo firman con el Apple ID de quien lo instala (ver documentacion/IOS.md).
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Preparar la web y sincronizar iOS
+        run: npm run sincronizar:ios
+
+      - name: Compilar para iPhone (sin firmar)
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath build/RideCast.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Empaquetar RideCast.ipa
+        run: |
+          app=build/RideCast.xcarchive/Products/Applications/App.app
+          test -f "$app/public/index.html"
+          mkdir -p Payload
+          cp -R "$app" Payload/
+          zip -qry RideCast.ipa Payload
+          ls -lh RideCast.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RideCast-ipa-sin-firmar
+          path: RideCast.ipa
+          if-no-files-found: error
