@@ -73,9 +73,13 @@ export async function gestionarRutas(request, env) {
       const existing = await env.DB.prepare("SELECT user_id FROM route_history WHERE id = ?").bind(data.id).first();
       if (existing) return existing.user_id === owner ? json({ saved: true }, 200, headers) : error("Identificador no disponible.", 409);
       const now = Date.now();
+      // Un visitante puede descartar su cookie y estrenar identidad en cada petición, así que
+      // los visitantes comparten además un límite global por hora.
+      const guestLimit = user ? "" : " AND (SELECT COUNT(*) FROM route_history WHERE user_id LIKE 'guest:%' AND created_at > ?) < 500";
       const result = await env.DB.prepare(`INSERT INTO route_history (id, user_id, kind, name, distance, created_at, payload)
-        SELECT ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM route_history WHERE user_id = ? AND created_at > ?) < 120
-        ON CONFLICT(id) DO NOTHING`).bind(data.id, owner, data.kind, data.name.trim(), data.distance, now, payload, owner, now - 3600000).run();
+        SELECT ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM route_history WHERE user_id = ? AND created_at > ?) < 120${guestLimit}
+        ON CONFLICT(id) DO NOTHING`).bind(data.id, owner, data.kind, data.name.trim(), data.distance, now, payload, owner, now - 3600000,
+        ...(user ? [] : [now - 3600000])).run();
       return result.meta.changes ? json({ saved: true }, 201, headers) : error("Se ha alcanzado el límite temporal de guardado. Reinténtalo más tarde.", 429);
     }
     return error("No encontrado.", 404);

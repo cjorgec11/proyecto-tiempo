@@ -1,0 +1,73 @@
+name: iOS
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - "cliente/**"
+      - "vendor/**"
+      - "index.html"
+      - "administracion.html"
+      - "aplicacion.js"
+      - "interfaz.css"
+      - "capacitor.config.json"
+      - "package.json"
+      - "package-lock.json"
+      - "herramientas/compilar-movil.mjs"
+      - "herramientas/recursos.mjs"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  simulador:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Sin scripts de instalación: no hace falta descargar Electron para iOS.
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Preparar la web y sincronizar iOS
+        run: npm run sincronizar:ios
+
+      - name: Compilar para el simulador (sin firmar)
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Abrir la app en un iPhone simulado
+        run: |
+          app=build/Build/Products/Debug-iphonesimulator/App.app
+          test -f "$app/public/index.html"
+          udid=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl launch "$udid" com.jorge.ridecast
+          sleep 25
+          # Si la app se ha cerrado, el proceso ya no aparece.
+          xcrun simctl spawn "$udid" launchctl list | grep -q com.jorge.ridecast
+          xcrun simctl io "$udid" screenshot ios-simulador.png
+          xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'process == "App"' > ios-registro.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulador
+          path: |
+            ios-simulador.png
+            ios-registro.txt
+          if-no-files-found: ignore

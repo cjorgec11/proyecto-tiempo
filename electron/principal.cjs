@@ -20,11 +20,21 @@ function crearVentana() {
   ventana.setMenuBarVisibility(false);
   ventana.loadFile(path.join(__dirname, "..", "index.html"));
 
-  // Los enlaces externos se abren en el navegador del sistema.
+  // Los enlaces externos se abren en el navegador del sistema y la ventana nunca
+  // abandona la aplicación (sin menú no habría forma de volver).
   ventana.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    abrirFuera(url);
     return { action: "deny" };
   });
+  ventana.webContents.on("will-navigate", (event, url) => {
+    if (url.startsWith("file:")) return;
+    event.preventDefault();
+    abrirFuera(url);
+  });
+}
+
+function abrirFuera(url) {
+  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
 }
 
 app.whenReady().then(crearVentana);

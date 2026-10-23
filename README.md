@@ -2,7 +2,7 @@
 
 Planificador de rutas ciclistas con previsión meteorológica por tramo,
 importación/exportación GPX y bibliotecas local y por cuenta. Incluye una versión web y
-envoltorios para Windows (Electron) y Android (Capacitor).
+envoltorios para Windows (Electron), Android e iOS (Capacitor).
 
 ## Empezar
 
@@ -31,12 +31,14 @@ Consultar la [guía de despliegue](documentacion/DESPLIEGUE.md) antes de exponer
 | `npm run escritorio` | Abrir la aplicación de escritorio |
 | `npm run compilar:windows` | Empaquetar Windows en `dist-electron/` |
 | `npm run sincronizar:android` | Preparar recursos y sincronizar Android |
+| `npm run sincronizar:ios` | Preparar recursos y sincronizar iOS (después, compilar en Xcode) |
 | `npm run compilar:apk` | Compilar APK de depuración en Windows |
 | `npm run preparar:publicacion` | Preparar fuentes de Sites en `.site-release/` |
 
 Android necesita su SDK y Java/Gradle compatibles con el proyecto. En otros
 sistemas, ejecutar `npm run sincronizar:android` y después `./gradlew assembleDebug` dentro
-de `android/`. Las tareas de compilación web y móvil regeneran sus directorios
+de `android/`. iOS necesita un Mac con Xcode: ver [la guía de iOS](documentacion/IOS.md).
+Las tareas de compilación web y móvil regeneran sus directorios
 de salida; no colocar archivos propios dentro de `dist/` o `www/`.
 
 ## Organización
@@ -50,7 +52,7 @@ de salida; no colocar archivos propios dentro de `dist/` o `www/`.
 | `herramientas/` | Compilación, empaquetado y configuración |
 | `pruebas/` | Pruebas y datos de ejemplo |
 | `documentacion/` | Administración, privacidad y despliegue |
-| `electron/`, `android/` | Aplicaciones nativas |
+| `electron/`, `android/`, `ios/` | Aplicaciones nativas |
 | `vendor/` | Bibliotecas del navegador y sus licencias |
 
 Las carpetas `.data/`, `node_modules/`, `dist/`, `dist-electron/`, `www/`,
@@ -67,6 +69,7 @@ repositorio y son necesarios.
 - [Cuentas, Google y contraseñas](documentacion/CUENTAS.md)
 - [Mapa del código y mantenimiento](documentacion/ESTRUCTURA.md)
 - [Qué es cada archivo y cuáles se pueden regenerar](documentacion/ARCHIVOS.md)
+- [App de iOS: compilar e instalar en el iPhone](documentacion/IOS.md)
 
 El build de Sites requiere `.openai/hosting.json`; los secretos se configuran
 en el servidor, nunca en recursos públicos. `AUTH_MODE=sites` solo es válido

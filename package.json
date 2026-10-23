@@ -19,6 +19,7 @@
     "build:win": "electron-builder --win --x64",
     "cap:sync": "npm run build:mobile && cap sync android",
     "cap:build:apk": "npm run cap:sync && cd android && gradlew.bat assembleDebug",
+    "cap:sync:ios": "npm run build:mobile && cap sync ios",
     "iniciar": "node servidor.mjs",
     "limpiar": "node herramientas/limpiar.mjs",
     "compilar": "node herramientas/compilar.mjs",
@@ -29,7 +30,8 @@
     "escritorio": "electron .",
     "compilar:windows": "electron-builder --win --x64",
     "sincronizar:android": "npm run compilar:movil && cap sync android",
-    "compilar:apk": "npm run sincronizar:android && cd android && gradlew.bat assembleDebug"
+    "compilar:apk": "npm run sincronizar:android && cd android && gradlew.bat assembleDebug",
+    "sincronizar:ios": "npm run compilar:movil && cap sync ios"
   },
   "build": {
     "appId": "com.jorge.ridecast",
@@ -67,6 +69,7 @@
     "@capacitor/android": "^8.3.2",
     "@capacitor/cli": "^8.3.2",
     "@capacitor/core": "^8.3.2",
+    "@capacitor/ios": "^8.3.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "electron": "^33.0.0",

@@ -451,7 +451,8 @@ export function descargarGpx(name, coords) {
 }
 
 export function crearArchivoGpx(name, coords) {
-  return new File([crearGpx(name, coords)], `${(name || "ruta").replace(/[^a-z0-9-_]+/gi, "_")}.gpx`, { type: "application/gpx+xml" });
+  const base = (name || "ruta").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9-_]+/gi, "_");
+  return new File([crearGpx(name, coords)], `${base}.gpx`, { type: "application/gpx+xml" });
 }
 
 export function puedeCompartirGpx(file, platform = navigator) {
@@ -469,7 +470,13 @@ export async function compartirGpx(file, platform = navigator) {
   }
 }
 
-export function descargarArchivoGpx(file) {
+export function descargarArchivoGpx(file, plataforma = globalThis.Capacitor) {
+  // La app de iOS no descarga enlaces <a download>: abre la hoja de compartir nativa.
+  const nativo = plataforma?.Plugins?.ArchivoGpx;
+  if (nativo) {
+    file.text().then((contenido) => nativo.compartir({ nombre: file.name, contenido })).catch(() => {});
+    return;
+  }
   const url = URL.createObjectURL(file);
   const link = document.createElement("a");
   link.href = url;

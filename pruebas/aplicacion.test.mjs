@@ -250,6 +250,17 @@ test("Garmin prepara el GPX completo y maneja compartir, cancelar y errores", as
   assert.equal(await view.compartirGpx(file, platform), 'failed');
 });
 
+test("GPX: nombres con tildes y descarga nativa en la app de iOS", async () => {
+  assert.equal(view.crearArchivoGpx('Vuelta a Córdoba', coords).name, 'Vuelta_a_Cordoba.gpx');
+  const file = view.crearArchivoGpx('Ruta iOS', coords);
+  const calls = [];
+  view.descargarArchivoGpx(file, { Plugins: { ArchivoGpx: { compartir: async data => { calls.push(data); } } } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].nombre, 'Ruta_iOS.gpx');
+  assert.equal(calls[0].contenido, await file.text());
+});
+
 test("Garmin impide rutas vacías y abre el diálogo con la ruta actual verificada", async () => {
   const dialog = document.querySelector('#garminModal');
   const originalFetch = globalThis.fetch;

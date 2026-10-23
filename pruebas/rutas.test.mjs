@@ -52,3 +52,19 @@ test("historial: consentimiento, rutas completas, previsión, acceso privado y e
     assert.equal(await DB.prepare("SELECT payload FROM route_history WHERE id = ?").bind(forecast.id).first(), null);
   } finally { DB.close(); }
 });
+
+test("historial: los visitantes sin cookie comparten un límite por hora y las cuentas no", async () => {
+  const DB = abrirBaseDatos(":memory:", fileURLToPath(new URL("../drizzle", import.meta.url)));
+  const env = { DB, AUTH_MODE: "sites" };
+  const origin = "https://ridecast.test";
+  const request = (data, user) => new Request(origin + "/api/routes", { method: "POST",
+    headers: { origin, "content-type": "application/json", ...(user ? { "oai-authenticated-user-id": user } : {}) }, body: JSON.stringify(data) });
+  const route = () => ({ id: crypto.randomUUID(), automatic: true, manual: true, kind: "planned", name: "Sin cuenta", distance: 1.25, speed: 23,
+    departure: new Date().toISOString(), coords: [{ lat: 40.4, lon: -3.7 }, { lat: 40.41, lon: -3.71 }] });
+  try {
+    const insert = DB.prepare("INSERT INTO route_history (id, user_id, kind, name, distance, created_at, payload) VALUES (?, ?, 'planned', 'x', 1, ?, '{}')");
+    for (let i = 0; i < 500; i++) await insert.bind(crypto.randomUUID(), `guest:${i}`, Date.now()).run();
+    assert.equal((await gestionarRutas(request(route()), env)).status, 429);
+    assert.equal((await gestionarRutas(request({ ...route(), consent: true }, "alice"), env)).status, 201);
+  } finally { DB.close(); }
+});

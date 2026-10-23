@@ -12,7 +12,7 @@ servicios de rutas y meteorología, almacenamiento local y las API del proyecto.
 `administracion.html` carga la administración. `servidor.mjs` es la entrada Node y
 `servidor/entrada-sites.mjs` la de Sites; ambas comparten los módulos del backend.
 Node utiliza SQLite y Sites el enlace D1 `DB`. Electron y Capacitor empaquetan
-el cliente web para escritorio y Android.
+el cliente web para escritorio, Android e iOS.
 
 ## Archivos de la raíz y configuración
 
@@ -28,7 +28,7 @@ el cliente web para escritorio y Android.
 | `package-lock.json` | Versiones exactas para instalaciones reproducibles con `npm ci`. |
 | `.env.example` | Plantilla de configuración sin credenciales reales. |
 | `.gitignore` | Exclusiones de datos privados, dependencias y resultados generados. |
-| `capacitor.config.json` | Identificador de la app Android y carpeta web `www/`. |
+| `capacitor.config.json` | Identificador de las apps Android e iOS y carpeta web `www/`. |
 | `drizzle.config.ts` | Configuración para generar migraciones del esquema. |
 | `.openai/hosting.json` | Identificador del proyecto Sites y enlaces de almacenamiento; no contiene contraseñas. |
 | `.claude/launch.json` | Atajo compartido para iniciar el servidor desde la herramienta de desarrollo. |
@@ -144,7 +144,7 @@ Se han eliminado `leaflet-src.js`, `leaflet-src.esm.js` y sus dos mapas: ninguna
 entrada, módulo o script de la aplicación los cargaba. Se conservan la versión
 utilizada, sus recursos y las licencias. No editar código de bibliotecas a mano.
 
-## Escritorio y Android
+## Escritorio, Android e iOS
 
 `electron/principal.cjs` crea la ventana de escritorio, carga el cliente local y
 gestiona enlaces externos. `package.json` determina los archivos empaquetados.
@@ -174,6 +174,17 @@ gestiona enlaces externos. `package.json` determina los archivos empaquetados.
 Las variantes de imágenes Android no son duplicados intercambiables: el sistema
 elige la apropiada para cada dispositivo. Se conservan las plataformas activas.
 
+| Archivo o grupo dentro de `ios/` | Función |
+| --- | --- |
+| `App/App.xcodeproj/` | Proyecto de Xcode de la app. |
+| `App/CapApp-SPM/` | Paquete Swift con Capacitor y sus plugins; `Package.swift` se regenera al sincronizar. |
+| `App/App/AppDelegate.swift`, `SceneDelegate.swift` | Arranque de la app con ciclo de vida por escenas. |
+| `App/App/ArchivoGpxPlugin.swift` | Controlador principal y plugin que comparte los GPX exportados con la hoja de compartir de iOS. |
+| `App/App/Info.plist` | Nombre, orientaciones, escenas y tipos GPX/TCX que se pueden importar. |
+| `App/App/Base.lproj/` | Pantalla de inicio y storyboard que carga el controlador principal. |
+| `App/App/Assets.xcassets/` | Icono y pantalla de inicio con el logotipo de RideCast. |
+| `debug.xcconfig`, `.gitignore` | Ajustes de depuración y exclusiones generadas por Capacitor. |
+
 ## Documentos: `documentacion/`
 
 | Archivo | Tema |
@@ -185,6 +196,7 @@ elige la apropiada para cada dispositivo. Se conservan las plataformas activas.
 | `SUGERENCIAS.md` | Sugerencias, votos, administración e historial automático. |
 | `FIRME-VERIFICADO.md` | Catálogo, evidencias y límites de la verificación del firme. |
 | `RENOMBRADOS.md` | Correspondencia histórica entre las rutas antiguas y actuales. |
+| `IOS.md` | Compilar e instalar la app de iOS. |
 
 ## Carpetas y archivos locales excluidos de Git
 
@@ -202,6 +214,7 @@ elige la apropiada para cada dispositivo. Se conservan las plataformas activas.
 | `android/.gradle/`, `android/build/`, `android/app/build/` | Cachés/resultados regenerables por Gradle. |
 | `android/local.properties` | Ruta del SDK en ese equipo. |
 | `android/app/src/main/assets/` y módulos generados de Capacitor | Copias regeneradas por `npm run sincronizar:android`; no editar allí el cliente web. |
+| `ios/App/App/public/`, `ios/App/App/capacitor.config.json`, `ios/App/App/config.xml`, `ios/capacitor-cordova-ios-plugins/` | Copias regeneradas por `npm run sincronizar:ios`; no editar allí el cliente web. |
 
 Se ha retirado el comprimido temporal `.site-release.tar.gz` de la raíz.
 Los datos, informes y entregas históricas se conservan. No usar `git clean -fdx`

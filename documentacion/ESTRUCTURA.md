@@ -45,7 +45,7 @@ Ejecutar `npm run probar` tras cambios y `npm run compilar` antes de publicar.
 - `.site-artifacts/`, `dist-electron/`: entregas anteriores; no se borran automaticamente.
 - `node_modules/`: dependencias instaladas, excluidas de Git.
 - `vendor/`: bibliotecas usadas por la aplicación, mapa de depuración de la distribución activa y licencias. Se retiraron las variantes `leaflet-src.js` y `leaflet-src.esm.js` y sus mapas porque no se cargaban.
-- `android/`, `electron/`: plataformas funcionales, no codigo sobrante.
+- `android/`, `ios/`, `electron/`: plataformas funcionales, no codigo sobrante.
 - `.claude/`: configuracion y tareas ajenas a la aplicacion; no mover ni eliminar durante la limpieza.
 
 Los documentos estan centralizados en `documentacion/`. No introducir copias de esos
