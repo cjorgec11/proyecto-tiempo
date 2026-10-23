@@ -63,6 +63,12 @@ jobs:
           xcrun simctl io "$udid" screenshot ios-simulador.png
           xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'process == "App"' > ios-registro.txt || true
 
+      - name: Captura en el registro (temporal)
+        run: |
+          sips -Z 700 ios-simulador.png --out pequena.png >/dev/null
+          echo "INICIO_CAPTURA"; base64 -i pequena.png | fold -w 800; echo "FIN_CAPTURA"
+          echo "INICIO_REGISTRO"; grep -iE "error|fault|⚡️" ios-registro.txt | head -40; echo "FIN_REGISTRO"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
